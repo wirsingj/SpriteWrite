@@ -1,8 +1,9 @@
-import { createSpriteSheetLayout } from './exportPlanning'
+import { createFullSpriteSheetLayout, createSpriteSheetLayout } from './exportPlanning'
 import { getAnimation, getColor, getFrame, parseCellKey } from './spriteData'
 import type {
   AnimationId,
   FrameId,
+  FullSpriteSheetExportOptions,
   LayerBlendMode,
   SpriteProject,
   SpriteSheetExportOptions,
@@ -99,6 +100,26 @@ export function renderAnimationToRgbaBuffer(
     })
 
     blitBuffer(buffer, frameBuffer, frameRegion.x, frameRegion.y)
+  })
+
+  return buffer
+}
+
+export function renderFullSpriteSheetToRgbaBuffer(
+  project: SpriteProject,
+  options: FullSpriteSheetExportOptions = {},
+): RgbaBuffer {
+  const layout = createFullSpriteSheetLayout(project, options)
+  const buffer = createTransparentBuffer(layout.sheetWidth, layout.sheetHeight)
+
+  layout.animations.forEach((animation) => {
+    animation.frames.forEach((frameRegion) => {
+      const frameBuffer = renderFrameToRgbaBuffer(project, frameRegion.frameId, {
+        scale: layout.scale,
+      })
+
+      blitBuffer(buffer, frameBuffer, frameRegion.x, frameRegion.y)
+    })
   })
 
   return buffer

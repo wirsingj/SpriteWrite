@@ -1,13 +1,20 @@
 import {
+  createFullSpriteSheetExportMetadata,
   createFrameExportMetadata,
   createSpriteSheetExportMetadata,
 } from '../domain/exportPlanning'
 import {
+  renderFullSpriteSheetToRgbaBuffer,
   renderAnimationToRgbaBuffer,
   renderFrameToRgbaBuffer,
   type RgbaBuffer,
 } from '../domain/exportRaster'
-import type { FrameId, SpriteProject, SpriteSheetExportOptions } from '../domain/spriteTypes'
+import type {
+  FrameId,
+  FullSpriteSheetExportOptions,
+  SpriteProject,
+  SpriteSheetExportOptions,
+} from '../domain/spriteTypes'
 
 export function renderFrameToCanvas(
   project: SpriteProject,
@@ -45,12 +52,26 @@ export function exportSpritesheetPng(
   return canvasToBlob(rgbaBufferToCanvas(renderAnimationToRgbaBuffer(project, animationId, options)))
 }
 
+export function exportFullSpriteSheetPng(
+  project: SpriteProject,
+  options: FullSpriteSheetExportOptions = {},
+): Promise<Blob> {
+  return canvasToBlob(rgbaBufferToCanvas(renderFullSpriteSheetToRgbaBuffer(project, options)))
+}
+
 export function exportSpritesheetMetadata(
   project: SpriteProject,
   animationId: string,
   options: Partial<Omit<SpriteSheetExportOptions, 'animationId'>> = {},
 ): string {
   return JSON.stringify(createSpriteSheetExportMetadata(project, animationId, options), null, 2)
+}
+
+export function exportFullSpriteSheetMetadata(
+  project: SpriteProject,
+  options: FullSpriteSheetExportOptions = {},
+): string {
+  return JSON.stringify(createFullSpriteSheetExportMetadata(project, options), null, 2)
 }
 
 export function exportFrameMetadata(project: SpriteProject, frameId: FrameId): string {

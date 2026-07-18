@@ -2,6 +2,8 @@
 
 Export is a product contract in SpriteWrite. The editor only matters if exported assets are clean, predictable, pixel-accurate, transparent where expected, and usable in game/software workflows without strange manual cleanup.
 
+The export model is engine-neutral. SpriteWrite should produce boring PNG and JSON artifacts first. Godot, Unity, or custom importer outputs can become export profiles later, but no engine should define the internal project format.
+
 ## Source Of Truth
 
 Exports are derived from `SpriteProject` data:
@@ -58,7 +60,7 @@ The pure renderer returns:
 
 `data` is RGBA ordered. This buffer is the tested export pixel source. Canvas export is a thin wrapper that copies the buffer into `ImageData` and asks the browser for a PNG blob.
 
-The renderer tests cover transparent alpha, exact palette RGBA values, scale mapping, hidden layer exclusion, non-exportable layer exclusion, deterministic visible-layer order, alpha compositing for layer opacity, multiply/screen blend behavior, spritesheet frame regions, transparent margins/spacing, frame order, and metadata/layout agreement. Canvas wrapper tests cover ImageData copy behavior, disabled smoothing, and `image/png` blob export calls.
+The renderer tests cover transparent alpha, exact palette RGBA values, scale mapping, hidden layer exclusion, non-exportable layer exclusion, deterministic visible-layer order, alpha compositing for layer opacity, multiply/screen blend behavior, animation-strip regions, full sprite-sheet row/column regions, transparent margins/spacing, transparent padding cells, frame order, and metadata/layout agreement. Canvas wrapper tests cover ImageData copy behavior, disabled smoothing, and `image/png` blob export calls.
 
 ## Current Frame PNG
 
@@ -72,9 +74,11 @@ For current-frame PNG export:
 - Visible layer pixels are alpha-composited in layer order.
 - At scale N, each cell expands to an N by N block of identical RGBA pixels.
 
-## Horizontal Spritesheet PNG
+Current-frame PNG is the primary static-asset export path for icons, buttons, backgrounds, props, and one-frame sprites.
 
-For current-animation horizontal spritesheet export:
+## Animation Strip PNG
+
+For current-animation strip export:
 
 - Frame order matches `animation.frameIds`.
 - `orientation = "horizontal"`.
@@ -88,58 +92,89 @@ For current-animation horizontal spritesheet export:
 - `sheetWidth = margin * 2 + frameWidth * frameCount + spacing * (frameCount - 1)`.
 - `sheetHeight = margin * 2 + frameHeight`.
 
-No trimming, cropping, packing, or reordering happens in the MVP export.
+No trimming, cropping, packing, or reordering happens in animation-strip export.
 
 Margins and spacing remain transparent unless a future explicit background option changes that contract.
 
-## Metadata JSON
+A one-frame animation is valid. It can be used as a one-frame sheet/metadata export when a downstream importer expects sheet-style data even for static assets.
 
-Exported spritesheet metadata is plain JSON and should be usable by game engines or custom importers.
+## Full Sprite Sheet PNG
+
+For full project sprite-sheet export:
+
+- The output is a fixed row-and-column grid.
+- One animation exports per row.
+- One frame exports per column.
+- Row order matches `project.animations`.
+- Frame order within each row matches each animation's `frameIds`.
+- `rowCount = project.animations.length`.
+- `columnCount = max(animation.frameIds.length)`.
+- `frameWidth = project.canvas.width * scale`.
+- `frameHeight = project.canvas.height * scale`.
+- `sheetWidth = margin * 2 + frameWidth * columnCount + spacing * (columnCount - 1)`.
+- `sheetHeight = margin * 2 + frameHeight * rowCount + spacing * (rowCount - 1)`.
+- Shorter animation rows leave transparent cells after their final frame.
+- Margins, spacing, and padded cells remain transparent.
+- The editor's Full Sprite Sheet View should visually match this row/column order.
+
+This is a Sprite Sheet, not a Packed Atlas. Use "Packed Atlas" only for a future export that implements arbitrary rectangle packing.
+
+## Full Sprite Sheet Metadata JSON
+
+Exported full sprite-sheet metadata is plain JSON and should be usable by game engines or custom importers.
 
 Metadata includes:
 
 - `formatName: "SpriteWrite"`
 - `formatVersion`
+- `imageFilename`
 - `projectId`
 - `projectName`
-- `animationId`
-- `animationName`
 - `sourceFrameWidth`
 - `sourceFrameHeight`
 - `frameWidth`
 - `frameHeight`
-- `frameCount`
 - `sheetWidth`
 - `sheetHeight`
-- `orientation`
+- `orientation: "rows"`
+- `rowCount`
+- `columnCount`
 - `scale`
 - `margin`
 - `spacing`
-- `fps`
-- `layers[]` with layer id, name, index, visibility, exportability, export inclusion, opacity, and blend mode
-- top-level `anchor`
-- top-level `hitbox` when present
-- `frames[]` with `frameId`, `frameName`, `index`, `x`, `y`, `width`, `height`, `durationMs`, optional `notes`, optional `tags`, `anchor`, and optional `hitbox`
+- `grid` with columns, rows, origin, cell size, margin, and spacing for boring grid import.
+- `importHints` with straight alpha, transparent background, no premultiplied alpha, no smoothing, pixel frame-region units, and top-left region basis.
+- `animations[]` with animation id, animation name, row index, frame count, FPS, loop behavior, and frame regions.
+- top-level `frames[]` flattened in deterministic row-major order.
+- each frame region includes animation id/name, frame id/name, row index, column index, x, y, width, height, duration, optional notes, tags, anchor, and hitbox when present.
 
 Metadata must match the actual PNG layout.
+
+For engine importers, the boring default is:
+
+- Slice from `grid.originX`, `grid.originY`.
+- Use `grid.cellWidth` and `grid.cellHeight` as the frame size.
+- Use `grid.spacing` between frames.
+- Read `frames[]` when an importer wants explicit per-frame rectangles.
+- Treat all rectangle coordinates and dimensions as output PNG pixels, not source-grid cells.
+- Disable filtering/smoothing in the engine importer for pixel art.
 
 ## Current Supported Outputs
 
 - Project JSON.
 - Current frame PNG.
-- Current animation horizontal spritesheet PNG.
-- Current animation metadata JSON.
+- Current animation strip PNG.
+- Full sprite sheet PNG.
+- Full sprite sheet PNG plus matching metadata JSON.
 
 ## Future Output Directions
 
 SpriteWrite should eventually support:
 
-- vertical spritesheets
-- grid spritesheets
+- vertical sprite sheets
 - individual frame PNG batches
-- atlas-style JSON
-- Godot-friendly metadata
-- Unity-friendly metadata
+- packed atlas PNG/JSON with arbitrary rectangle packing
+- engine export profiles, including Godot and Unity
 - custom importer metadata
 - tiles or tile-like sheets
 - UI/icon/menu asset exports

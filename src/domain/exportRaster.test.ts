@@ -1,12 +1,18 @@
 import { describe, expect, it } from 'vitest'
-import { createSpriteSheetExportMetadata, createSpriteSheetLayout } from './exportPlanning'
+import {
+  createFullSpriteSheetExportMetadata,
+  createFullSpriteSheetLayout,
+  createSpriteSheetExportMetadata,
+  createSpriteSheetLayout,
+} from './exportPlanning'
 import {
   getPixel,
   parseHexColor,
   renderAnimationToRgbaBuffer,
   renderFrameToRgbaBuffer,
+  renderFullSpriteSheetToRgbaBuffer,
 } from './exportRaster'
-import { cellKey, createDefaultProject, getFrame, validateProject } from './spriteData'
+import { cellKey, createDefaultProject, createHeroDemoProject, getFrame, validateProject } from './spriteData'
 
 describe('export raster rendering', () => {
   it('parses supported hex palette colors into RGBA', () => {
@@ -169,7 +175,7 @@ describe('export raster rendering', () => {
     expect(getPixel(buffer, 15, 20)).toEqual({ r: 101, g: 255, b: 131, a: 255 })
   })
 
-  it('renders spritesheet dimensions from createSpriteSheetLayout', () => {
+  it('renders animation strip dimensions from createSpriteSheetLayout', () => {
     const project = createDefaultProject()
     const layout = createSpriteSheetLayout(project, 'idle', { scale: 2, margin: 2, spacing: 3 })
     const buffer = renderAnimationToRgbaBuffer(project, 'idle', { scale: 2, margin: 2, spacing: 3 })
@@ -207,7 +213,7 @@ describe('export raster rendering', () => {
     expect(getPixel(buffer, 33, 20).a).toBe(0)
   })
 
-  it('preserves animation frame order in spritesheet regions', () => {
+  it('preserves animation frame order in animation strip regions', () => {
     const project = createDefaultProject()
     const layout = createSpriteSheetLayout(project, 'idle')
     const buffer = renderAnimationToRgbaBuffer(project, 'idle')
@@ -223,7 +229,7 @@ describe('export raster rendering', () => {
     expect(getPixel(buffer, secondRegion.x + 8, secondRegion.y + 20).a).toBe(0)
   })
 
-  it('keeps transparent cells alpha 0 across the spritesheet', () => {
+  it('keeps transparent cells alpha 0 across the animation strip', () => {
     const project = createDefaultProject()
     const buffer = renderAnimationToRgbaBuffer(project, 'idle')
 
@@ -241,5 +247,38 @@ describe('export raster rendering', () => {
     expect(metadata.frames).toEqual(layout.frames)
     expect(metadata.sheetWidth).toBe(layout.sheetWidth)
     expect(metadata.sheetHeight).toBe(layout.sheetHeight)
+  })
+
+  it('renders the full sprite sheet dimensions from the combined grid layout', () => {
+    const project = createHeroDemoProject()
+    const layout = createFullSpriteSheetLayout(project, { scale: 2, margin: 2, spacing: 3 })
+    const buffer = renderFullSpriteSheetToRgbaBuffer(project, { scale: 2, margin: 2, spacing: 3 })
+
+    expect(buffer.width).toBe(layout.sheetWidth)
+    expect(buffer.height).toBe(layout.sheetHeight)
+  })
+
+  it('places full sprite sheet frames in their metadata row and column regions', () => {
+    const project = createHeroDemoProject()
+    const metadata = createFullSpriteSheetExportMetadata(project, { margin: 1, spacing: 2 })
+    const buffer = renderFullSpriteSheetToRgbaBuffer(project, { margin: 1, spacing: 2 })
+    const idleFirst = metadata.animations[0].frames[0]
+    const swordLast = metadata.animations[3].frames[4]
+
+    expect(getPixel(buffer, idleFirst.x + 16, idleFirst.y + 14).a).toBeGreaterThan(0)
+    expect(getPixel(buffer, swordLast.x + 18, swordLast.y + 14).a).toBeGreaterThan(0)
+  })
+
+  it('leaves full sprite sheet padding cells transparent for shorter animation rows', () => {
+    const project = createHeroDemoProject()
+    const layout = createFullSpriteSheetLayout(project, { margin: 2, spacing: 1 })
+    const buffer = renderFullSpriteSheetToRgbaBuffer(project, { margin: 2, spacing: 1 })
+    const emptyIdleColumnX = layout.margin + 4 * (layout.frameWidth + layout.spacing) + 16
+    const idleRowY = layout.margin + 16
+    const emptyCrouchColumnX = layout.margin + 3 * (layout.frameWidth + layout.spacing) + 16
+    const crouchRowY = layout.margin + 2 * (layout.frameHeight + layout.spacing) + 16
+
+    expect(getPixel(buffer, emptyIdleColumnX, idleRowY).a).toBe(0)
+    expect(getPixel(buffer, emptyCrouchColumnX, crouchRowY).a).toBe(0)
   })
 })

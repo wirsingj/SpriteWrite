@@ -5,14 +5,15 @@ Future SpriteWrite passes should be narrow, auditable, and grounded in the curre
 ## Working Loop
 
 1. Read `docs/STATE_OF_SPRITEWRITE.md`.
-2. Read `docs/APP_FLOW.md`.
-3. Read `docs/AUDIT_CHECKLIST.md`.
-4. Inspect the current code.
-5. Make one focused improvement.
-6. Run tests and build.
-7. Update docs if behavior changed.
-8. Summarize exactly what changed.
-9. List the next recommended prompt.
+2. Read `docs/PRODUCT_VISION.md`.
+3. Read `docs/APP_FLOW.md`.
+4. Read `docs/AUDIT_CHECKLIST.md`.
+5. Inspect the current code.
+6. Make one focused improvement.
+7. Run tests and build.
+8. Update docs if behavior changed.
+9. Summarize exactly what changed.
+10. List the next recommended prompt.
 
 ## Warning
 

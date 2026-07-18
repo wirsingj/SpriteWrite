@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createDefaultProject } from '../domain/spriteData'
 import {
+  listOllamaModels,
   OllamaPatchProvider,
+  parseOllamaAnimationDraftResponse,
   parseOllamaPatchResponse,
+  pullOllamaModel,
   testOllamaConnection,
 } from './ollamaPatchProvider'
 
@@ -23,6 +26,36 @@ describe('parseOllamaPatchResponse', () => {
     expect(parsed).toEqual([{ op: 'clear', x: 3, y: 4 }])
   })
 
+  it('accepts common operation wrapper aliases and single operation objects', () => {
+    expect(parseOllamaPatchResponse('{"ops":[{"op":"clear","x":3,"y":4}]}')).toEqual([
+      { op: 'clear', x: 3, y: 4 },
+    ])
+    expect(
+      parseOllamaPatchResponse('{"patchOperations":[{"op":"set","x":1,"y":2,"colorId":"ink"}]}'),
+    ).toEqual([{ op: 'set', x: 1, y: 2, colorId: 'ink' }])
+    expect(parseOllamaPatchResponse('{"op":"clear","x":5,"y":6}')).toEqual([
+      { op: 'clear', x: 5, y: 6 },
+    ])
+  })
+
+  it('accepts an animation draft object', () => {
+    const parsed = parseOllamaAnimationDraftResponse(
+      '{"animationName":"Idle","fps":4,"frames":[{"name":"Idle 001","durationMs":250,"patch":[{"op":"set","x":1,"y":2,"colorId":"ink"}]}]}',
+    )
+
+    expect(parsed).toEqual({
+      animationName: 'Idle',
+      fps: 4,
+      frames: [
+        {
+          name: 'Idle 001',
+          durationMs: 250,
+          patch: [{ op: 'set', x: 1, y: 2, colorId: 'ink' }],
+        },
+      ],
+    })
+  })
+
   it('extracts a fenced patch array', () => {
     const parsed = parseOllamaPatchResponse('```json\n[{"op":"clear","x":5,"y":6}]\n```')
 
@@ -40,6 +73,104 @@ describe('parseOllamaPatchResponse', () => {
       'Connected. Models: llama3.2',
     )
     expect(fetch).toHaveBeenCalledWith('http://localhost:11434/api/tags')
+  })
+
+  it('lists local Ollama models', async () => {
+    const fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        models: [
+          {
+            name: 'llama3.2:latest',
+            modified_at: '2026-07-17T00:00:00Z',
+            size: 123,
+            capabilities: ['completion'],
+          },
+          { name: '' },
+        ],
+      }),
+    } as Response)
+    vi.stubGlobal('fetch', fetch)
+
+    await expect(listOllamaModels('http://localhost:11434/')).resolves.toEqual([
+      {
+        name: 'llama3.2:latest',
+        modifiedAt: '2026-07-17T00:00:00Z',
+        size: 123,
+        capabilities: ['completion'],
+        family: undefined,
+        families: [],
+        parameterSize: undefined,
+      },
+    ])
+  })
+
+  it('derives vision capability from Ollama model details', async () => {
+    const fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        models: [
+          {
+            name: 'llava:7b',
+            details: {
+              family: 'llama',
+              families: ['llama', 'clip'],
+              parameter_size: '7B',
+            },
+          },
+          {
+            name: 'qwen3:14b',
+            details: {
+              family: 'qwen3',
+              families: ['qwen3'],
+              parameter_size: '14.8B',
+            },
+          },
+        ],
+      }),
+    } as Response)
+    vi.stubGlobal('fetch', fetch)
+
+    await expect(listOllamaModels('http://localhost:11434')).resolves.toEqual([
+      {
+        name: 'llava:7b',
+        modifiedAt: undefined,
+        size: undefined,
+        capabilities: ['vision', 'completion'],
+        family: 'llama',
+        families: ['llama', 'clip'],
+        parameterSize: '7B',
+      },
+      {
+        name: 'qwen3:14b',
+        modifiedAt: undefined,
+        size: undefined,
+        capabilities: ['completion'],
+        family: 'qwen3',
+        families: ['qwen3'],
+        parameterSize: '14.8B',
+      },
+    ])
+  })
+
+  it('pulls an Ollama model without streaming', async () => {
+    const fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ status: 'success' }),
+    } as Response)
+    vi.stubGlobal('fetch', fetch)
+
+    await expect(pullOllamaModel('http://localhost:11434/', ' llama3.2 ')).resolves.toBe(
+      'Downloaded llama3.2.',
+    )
+    expect(fetch).toHaveBeenCalledWith(
+      'http://localhost:11434/api/pull',
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'llama3.2', stream: false }),
+      }),
+    )
   })
 
   it('surfaces Ollama connection failures', async () => {
@@ -128,5 +259,101 @@ describe('parseOllamaPatchResponse', () => {
     })
     expect(requestBody.prompt).toContain('Return JSON only')
     expect(requestBody.prompt).toContain('Palette IDs:')
+  })
+
+  it('explains when selected-frame patch requests receive animation draft JSON', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          response: '{"frames":[{"patch":[{"op":"set","x":1,"y":2,"colorId":"ink"}]}]}',
+        }),
+      } as Response),
+    )
+
+    const provider = new OllamaPatchProvider({
+      baseUrl: 'http://localhost:11434/',
+      model: 'llama3.2',
+    })
+
+    await expect(
+      provider.requestPatch({
+        project: createDefaultProject(),
+        animationId: 'idle',
+        frameId: 'idle-001',
+        layerId: 'base',
+        instruction: 'add a small mark',
+        constraints: { selectedColorId: 'slime_mid', maxOperations: 4 },
+      }),
+    ).rejects.toThrow('animation draft object')
+  })
+
+  it('requests structured animation draft frames from Ollama', async () => {
+    const fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        response:
+          '{"animationName":"Idle","fps":4,"frames":[{"name":"Idle 001","durationMs":250,"patch":[{"op":"set","x":10,"y":12,"colorId":"ink"}]}]}',
+      }),
+    } as Response)
+    vi.stubGlobal('fetch', fetch)
+
+    const provider = new OllamaPatchProvider({
+      baseUrl: 'http://localhost:11434/',
+      model: 'llama3.2',
+    })
+    const draft = await provider.requestAnimationDraft({
+      project: createDefaultProject(),
+      animationId: 'idle',
+      frameId: 'idle-001',
+      layerId: 'base',
+      instruction: 'Hero wearing a cape. Standing animation.',
+      constraints: { selectedColorId: 'slime_mid', maxOperations: 128 },
+      frameCount: 4,
+    })
+
+    expect(draft.frames).toHaveLength(1)
+    const requestBody = JSON.parse(fetch.mock.calls[0][1]?.body as string) as {
+      model: string
+      stream: boolean
+      format: string
+      prompt: string
+    }
+    expect(requestBody).toMatchObject({
+      model: 'llama3.2',
+      stream: false,
+      format: 'json',
+    })
+    expect(requestBody.prompt).toContain('Return 4 frames.')
+    expect(requestBody.prompt).toContain('Each frame patch builds the full visible pixels')
+    expect(requestBody.prompt).toContain('Do not return an image')
+  })
+
+  it('includes raw Ollama response text when animation draft parsing fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ response: '{"note":"not frame JSON"}' }),
+      } as Response),
+    )
+
+    const provider = new OllamaPatchProvider({
+      baseUrl: 'http://localhost:11434/',
+      model: 'llama3.2',
+    })
+
+    await expect(
+      provider.requestAnimationDraft({
+        project: createDefaultProject(),
+        animationId: 'idle',
+        frameId: 'idle-001',
+        layerId: 'base',
+        instruction: 'make a coin spin',
+        constraints: { selectedColorId: 'slime_mid', maxOperations: 128 },
+        frameCount: 4,
+      }),
+    ).rejects.toThrow('Raw Ollama response')
   })
 })

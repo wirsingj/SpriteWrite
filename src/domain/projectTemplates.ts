@@ -1,4 +1,4 @@
-import { createBlankProject, createOozeDemoProject } from './spriteData'
+import { createBlankProject, createHeroDemoProject, createOozeDemoProject } from './spriteData'
 import type { SpriteAssetType, SpriteProject } from './spriteTypes'
 
 export interface CreateProjectInput {
@@ -23,7 +23,7 @@ export const SPRITE_PROJECT_TEMPLATES: SpriteProjectTemplate[] = [
     id: 'blank-32',
     name: 'Blank 32x32',
     description: 'A compact blank sprite grid for icons, tiny actors, and experiments.',
-    assetType: 'generic',
+    assetType: 'custom',
     width: 32,
     height: 32,
     createProject(input) {
@@ -31,7 +31,7 @@ export const SPRITE_PROJECT_TEMPLATES: SpriteProjectTemplate[] = [
         name: input.name,
         width: input.width ?? 32,
         height: input.height ?? 32,
-        assetType: input.assetType ?? 'generic',
+        assetType: input.assetType ?? 'custom',
       })
     },
   },
@@ -39,7 +39,7 @@ export const SPRITE_PROJECT_TEMPLATES: SpriteProjectTemplate[] = [
     id: 'blank-64',
     name: 'Blank 64x64',
     description: 'A larger blank sprite grid for characters, enemies, and chunky effects.',
-    assetType: 'generic',
+    assetType: 'custom',
     width: 64,
     height: 64,
     createProject(input) {
@@ -47,7 +47,7 @@ export const SPRITE_PROJECT_TEMPLATES: SpriteProjectTemplate[] = [
         name: input.name,
         width: input.width ?? 64,
         height: input.height ?? 64,
-        assetType: input.assetType ?? 'generic',
+        assetType: input.assetType ?? 'custom',
       })
     },
   },
@@ -71,7 +71,7 @@ export const SPRITE_PROJECT_TEMPLATES: SpriteProjectTemplate[] = [
     id: 'button-64x24',
     name: 'UI Button 64x24',
     description: 'A blank wide grid for small button states and menu controls.',
-    assetType: 'button',
+    assetType: 'ui',
     width: 64,
     height: 24,
     createProject(input) {
@@ -79,22 +79,37 @@ export const SPRITE_PROJECT_TEMPLATES: SpriteProjectTemplate[] = [
         name: input.name,
         width: input.width ?? 64,
         height: input.height ?? 24,
-        assetType: input.assetType ?? 'button',
+        assetType: input.assetType ?? 'ui',
       })
+    },
+  },
+  {
+    id: 'hero-32-demo',
+    name: 'Hero 32x32 Sprite Sheet Demo',
+    description: 'A multi-row hero sprite sheet with Idle, Jump, Crouch, and Sword Stab animations.',
+    assetType: 'character',
+    width: 32,
+    height: 32,
+    createProject(input) {
+      const project = createHeroDemoProject(input.name || 'Hero Sprite Demo')
+      return {
+        ...project,
+        assetType: input.assetType ?? 'character',
+      }
     },
   },
   {
     id: 'ooze-32-demo',
     name: 'Ooze 32x32 Demo',
-    description: 'The starter ooze with two idle frames, useful as a working reference asset.',
-    assetType: 'ooze',
+    description: 'A tiny two-frame ooze reference, kept mostly as a minimal comparison asset.',
+    assetType: 'creature',
     width: 32,
     height: 32,
     createProject(input) {
       const project = createOozeDemoProject(input.name || 'Ooze Sprite Starter')
       return {
         ...project,
-        assetType: input.assetType ?? 'ooze',
+        assetType: input.assetType ?? 'creature',
       }
     },
   },

@@ -57,6 +57,24 @@ Use this after each Codex pass. The goal is not ceremony; the goal is to keep Sp
 - [ ] Frame hitbox editing is covered by a UI smoke test.
 - [ ] Last frame cannot be deleted.
 - [ ] Final frame/default layer/final animation delete-disabled state is covered by a UI smoke test.
+- [ ] Atlas rows support modifier multi-select for frames.
+- [ ] Atlas row modifier multi-select is covered by a UI smoke test.
+- [ ] Atlas rows support drag reorder within an animation row.
+- [ ] Atlas row drag reorder is covered by a UI smoke test and exported Project JSON frame-order assertion.
+- [ ] Atlas rows support selected-frame duplicate and delete actions.
+- [ ] Atlas selected-frame duplicate/delete actions are covered by UI smoke tests and exported Project JSON assertions.
+- [ ] Atlas rows support selected-frame duration edits.
+- [ ] Atlas selected-frame duration edits are covered by UI smoke tests and exported Project JSON assertions.
+- [ ] Atlas rows support selected-frame notes/tags edits.
+- [ ] Atlas selected-frame notes/tags edits are covered by UI smoke tests and exported Project JSON assertions.
+- [ ] Canvas is the dominant workspace on common desktop viewports.
+- [ ] Atlas/frame strip stays attached below the canvas as a filmstrip, not buried in a sidebar.
+- [ ] Bottom atlas/frame strip height can be resized on desktop.
+- [ ] Right preview/inspector panel width can be resized on desktop.
+- [ ] Preview can use a solid background color without changing exported transparency.
+- [ ] Center workspace can switch between detailed frame editing and full sprite sheet view.
+- [ ] Full sprite sheet view shows animation rows and lets a frame click return to editing.
+- [ ] Full sprite sheet workspace switching is covered by a UI smoke test.
 - [ ] Can add, switch, rename, and delete non-final animations.
 - [ ] Animation rename is covered by a UI smoke test.
 - [ ] Animation add/duplicate/delete is covered by a UI smoke test.
@@ -83,8 +101,11 @@ Use this after each Codex pass. The goal is not ceremony; the goal is to keep Sp
 - [ ] Home/start screen loads.
 - [ ] Can create a new blank 32x32 project.
 - [ ] Can create a new blank 64x64 project.
-- [ ] Blank/icon/button projects use generic palette labels, not slime labels.
-- [ ] Can create the ooze demo project.
+- [ ] New-project asset categories are broad and engine-neutral: character, creature, tile, environment, prop, object, background, effect, UI, icon, and custom.
+- [ ] Blank/icon/UI button projects use neutral palette labels, not slime labels.
+- [ ] Can create/open the hero sprite sheet demo with multiple animation rows.
+- [ ] Can still create the minimal ooze reference template when needed.
+- [ ] Ooze examples remain demo/reference content and do not dominate the product language.
 - [ ] Can return home from the editor.
 - [ ] Returning home and reopening the current project is covered by a UI smoke test.
 - [ ] Can import from home.
@@ -111,8 +132,20 @@ Use this after each Codex pass. The goal is not ceremony; the goal is to keep Sp
 - [ ] Apply mutates only expected cells.
 - [ ] Undo can revert applied patch.
 - [ ] Failed provider calls do not break the app.
+- [ ] Main Ask panel can refresh local Ollama models.
+- [ ] Main Ask panel shows all refreshed installed Ollama models in a real selector, not only filtered datalist suggestions.
+- [ ] Main Ask panel can pull/download a named Ollama model.
+- [ ] Main Ask panel `Ask Ollama` shows visible status/errors where the user clicked.
 - [ ] Ollama connection and patch request failures are covered with stubbed provider tests.
 - [ ] Ollama patch request success is covered with stubbed provider tests.
+- [ ] Ollama patch parser accepts common wrapper aliases and explains wrong JSON object shapes.
+- [ ] Ollama model refresh/download/main-generate flows are covered with stubbed-fetch tests.
+- [ ] Broad Ollama character/animation prompts route to structured animation-draft JSON, not selected-frame noise.
+- [ ] Broad Ollama animation drafts create 3-6 editable frames only after validation/coherence checks pass.
+- [ ] AI assistance remains constrained co-editing: structured patches, frame drafts, palette suggestions, or layer operations, never irreversible raster replacement.
+- [ ] Future AI operations preserve fixed dimensions, palette constraints, frame intent, neighboring-frame context, silhouette/identity constraints, and user preview/accept/reject/undo.
+- [ ] Invalid selected-frame Ollama patches show errors and do not render proposal overlays on the canvas.
+- [ ] Vision-oriented Ollama model names show a suitability warning for strict JSON patch workflows.
 
 ## Export Audit
 
@@ -125,31 +158,45 @@ Use this after each Codex pass. The goal is not ceremony; the goal is to keep Sp
 - [ ] Transparent cell alpha test exists.
 - [ ] Painted cell RGBA test exists.
 - [ ] Scale mapping test exists.
-- [ ] Spritesheet PNG exports at exact expected dimensions.
-- [ ] Spritesheet PNG export button is covered by a UI smoke test.
-- [ ] Spritesheet region test exists.
-- [ ] Spritesheet exports aligned in one horizontal row.
+- [ ] Current animation strip PNG exports at exact expected dimensions.
+- [ ] Current animation strip PNG export button is covered by a UI smoke test.
+- [ ] Animation strip region test exists.
+- [ ] Animation strip exports aligned in one horizontal row.
+- [ ] Full sprite sheet PNG exports one animation per row and one frame per column.
+- [ ] Full sprite sheet dimensions use max animation frame count and animation row count.
+- [ ] Full sprite sheet respects scale, margin, and spacing.
+- [ ] Full sprite sheet leaves short-row padding cells transparent.
+- [ ] Full sprite sheet PNG export button is covered by a UI smoke test.
+- [ ] Full sprite sheet PNG plus metadata JSON export is covered by a UI smoke test.
+- [ ] Full Sprite Sheet View visually matches full sprite sheet row/column export ordering.
 - [ ] Transparent cells remain transparent.
 - [ ] Grid, checkerboard, onion, selection, and patch overlays do not export.
 - [ ] Visible non-exportable layers do not export.
-- [ ] Frame order matches timeline.
+- [ ] Animation strip frame order matches the bottom atlas filmstrip.
+- [ ] Full sprite sheet row order matches visible animation order.
+- [ ] Full sprite sheet column order matches visible timeline order.
 - [ ] Metadata/layout match tests exist.
-- [ ] Metadata export button is covered by a UI smoke test.
-- [ ] Metadata frame regions match PNG layout.
-- [ ] Metadata matches sheet dimensions, frame count, FPS, anchor, and layer info.
+- [ ] Full sprite sheet metadata frame regions match PNG layout.
+- [ ] Metadata includes image filename, sheet dimensions, cell size, rows, columns, scale, margin, spacing, animation ordering, row index, frame column, FPS, loop behavior, duration, anchor, tags, and hitbox when present.
 - [ ] Canvas PNG export uses the tested RGBA renderer.
 - [ ] Canvas wrapper tests verify ImageData copy, smoothing disabled, and PNG blob calls.
 - [ ] Exported project JSON re-imports.
-- [ ] Exported spritesheet can be imported by common game workflows as a grid/frame sheet.
+- [ ] Exported full sprite sheet can be imported by common game workflows as a grid/frame sheet.
+- [ ] "Sprite Sheet" means fixed row/column output; "Packed Atlas" is not used unless arbitrary rectangle packing exists.
 - [ ] No blurry scaling.
 - [ ] Canvas output is derived from project data.
 
 ## Product Feel Audit
 
+- [ ] SpriteWrite is described as a local-first, AI-assisted pixel asset studio, not an OozeTactics-specific or Godot-specific utility.
+- [ ] Product language covers animated characters/creatures, static props, tiles/walls/terrain, backgrounds, effects, icons, UI assets, animation strips, and complete sprite sheets.
+- [ ] Docs and UI avoid treating "N-bit" wording as a technical model assumption; concrete dimensions, palette constraints, scale, animation structure, and export profiles are used instead.
 - [ ] UI is understandable.
 - [ ] Grid is crisp.
 - [ ] Panels are readable.
 - [ ] Main workflow feels like a tool, not a tech demo.
+- [ ] Normal drawing does not expose every advanced metadata/export/provider control at equal weight.
+- [ ] Palette/layers and frame/animation properties are compact/contextual.
 - [ ] AI is not visually or conceptually centered over the asset workflow.
 
 ## Documentation Audit

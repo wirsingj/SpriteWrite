@@ -11,6 +11,14 @@ describe('project templates', () => {
     })
   })
 
+  it('uses formal asset categories for new templates', () => {
+    const legacyPrototypeTypes = new Set(['generic', 'ooze', 'button', 'enemy', 'parallax'])
+
+    SPRITE_PROJECT_TEMPLATES.forEach((template) => {
+      expect(legacyPrototypeTypes.has(template.assetType)).toBe(false)
+    })
+  })
+
   it('creates a valid blank 32x32 project', () => {
     const project = getProjectTemplate('blank-32').createProject({ name: 'Icon Draft' })
 
@@ -28,24 +36,25 @@ describe('project templates', () => {
     expect(validateProject(project).valid).toBe(true)
   })
 
-  it('uses a generic non-ooze palette for blank templates', () => {
-    const project = getProjectTemplate('blank-32').createProject({ name: 'Generic Draft' })
+  it('uses a neutral non-ooze palette for blank templates', () => {
+    const project = getProjectTemplate('blank-32').createProject({ name: 'Custom Draft' })
     const paletteIds = project.palette.map((color) => color.id)
     const paletteNames = project.palette.map((color) => color.name).join(' ')
 
+    expect(project.assetType).toBe('custom')
     expect(paletteIds).toContain('ink')
     expect(paletteIds).toContain('accent')
     expect(paletteIds).not.toContain('slime_mid')
     expect(paletteNames).not.toMatch(/slime/i)
   })
 
-  it('creates icon and button templates with non-ooze identities', () => {
+  it('creates icon and UI button templates with neutral identities', () => {
     const icon = getProjectTemplate('icon-32').createProject({ name: 'Save Icon' })
     const button = getProjectTemplate('button-64x24').createProject({ name: 'Start Button' })
 
     expect(icon.assetType).toBe('icon')
     expect(icon.canvas).toEqual({ width: 32, height: 32 })
-    expect(button.assetType).toBe('button')
+    expect(button.assetType).toBe('ui')
     expect(button.canvas).toEqual({ width: 64, height: 24 })
     expect(icon.palette.map((color) => color.id)).not.toContain('slime_mid')
     expect(button.palette.map((color) => color.id)).not.toContain('slime_mid')
@@ -54,17 +63,37 @@ describe('project templates', () => {
   it('creates an ooze demo with animation and frame data', () => {
     const project = getProjectTemplate('ooze-32-demo').createProject({ name: 'Ooze Friend' })
 
-    expect(project.assetType).toBe('ooze')
+    expect(project.assetType).toBe('creature')
     expect(project.animations[0].frameIds).toHaveLength(2)
     expect(Object.keys(project.frames[0].layers[0].cells).length).toBeGreaterThan(0)
     expect(project.palette.map((color) => color.id)).toContain('slime_mid')
     expect(validateProject(project).valid).toBe(true)
   })
 
+  it('creates a hero sprite sheet demo with several animation rows and frames', () => {
+    const project = getProjectTemplate('hero-32-demo').createProject({ name: 'Hero Test' })
+
+    expect(project.name).toBe('Hero Test')
+    expect(project.assetType).toBe('character')
+    expect(project.canvas).toEqual({ width: 32, height: 32 })
+    expect(project.animations.map((animation) => animation.name)).toEqual([
+      'Idle',
+      'Jump',
+      'Crouch',
+      'Sword Stab',
+    ])
+    expect(project.animations.map((animation) => animation.frameIds.length)).toEqual([4, 5, 3, 5])
+    expect(project.frames).toHaveLength(17)
+    expect(Object.keys(project.frames[0].layers[0].cells).length).toBeGreaterThan(30)
+    expect(project.palette.map((color) => color.id)).toContain('cape')
+    expect(project.palette.map((color) => color.id)).toContain('steel')
+    expect(validateProject(project).valid).toBe(true)
+  })
+
   it('includes project identity in export metadata', () => {
     const project = getProjectTemplate('blank-32').createProject({
       name: 'Button Draft',
-      assetType: 'button',
+      assetType: 'ui',
     })
     project.description = 'A test button asset.'
 
@@ -72,6 +101,6 @@ describe('project templates', () => {
 
     expect(metadata.projectName).toBe('Button Draft')
     expect(metadata.projectDescription).toBe('A test button asset.')
-    expect(metadata.assetType).toBe('button')
+    expect(metadata.assetType).toBe('ui')
   })
 })

@@ -6,7 +6,7 @@ purpose: Operating knowledge for setup, checks, diagnostics, and safe maintenanc
 belongs-here: commands, environment notes, focused checks, important files, danger files, diagnostics, failure playbooks, unverified procedures.
 not-here: product roadmap, durable architecture narrative, complete implementation history.
 durability: moderately stable; keep concise and practical.
-read-with: SOT; Architecture; README.md; docs/DEV_LOOP.md; docs/AUDIT_CHECKLIST.md.
+read-with: SOT; Architecture; README.md; docs/PRODUCT_VISION.md; docs/DEV_LOOP.md; docs/AUDIT_CHECKLIST.md.
 update-when: commands, setup, checks, common failures, generated files, or maintenance practices change.
 agent-guidance: Run focused checks for touched areas. Do not reset or discard work. Report uncertainty and exact command results.
 ---
@@ -67,6 +67,7 @@ The package scripts are:
 
 - `README.md`: user-facing overview, run instructions, export/save concepts.
 - `docs/STATE_OF_SPRITEWRITE.md`: detailed current project state and active roadmap.
+- `docs/PRODUCT_VISION.md`: durable product scope, asset categories, AI assistance model, recipe direction, and export direction.
 - `docs/APP_FLOW.md`: intended user and state flow.
 - `docs/AI_PATCH_DOCTRINE.md`: provider and patch boundaries.
 - `docs/EXPORT_CONTRACT.md`: export promises.

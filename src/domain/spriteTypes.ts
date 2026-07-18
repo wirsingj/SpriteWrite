@@ -4,12 +4,20 @@ export type FrameId = string
 export type LayerId = string
 export type SpriteAssetType =
   | 'character'
+  | 'creature'
+  | 'tile'
+  | 'environment'
+  | 'prop'
+  | 'object'
+  | 'background'
+  | 'effect'
+  | 'ui'
+  | 'icon'
+  | 'custom'
+  // Legacy import aliases from early SpriteWrite prototypes. Keep valid for old Project JSON.
   | 'enemy'
   | 'ooze'
-  | 'icon'
-  | 'ui'
   | 'button'
-  | 'background'
   | 'parallax'
   | 'generic'
 
@@ -82,6 +90,15 @@ export interface SpriteSheetExportOptions {
   includeMetadata?: boolean
 }
 
+export interface FullSpriteSheetExportOptions {
+  scale?: number
+  margin?: number
+  spacing?: number
+  background?: 'transparent'
+  includeMetadata?: boolean
+  imageFilename?: string
+}
+
 export interface ExportedFrameRegion {
   frameId: FrameId
   frameName: string
@@ -95,6 +112,23 @@ export interface ExportedFrameRegion {
   tags?: string[]
   anchor: AnchorPoint
   hitbox?: Hitbox
+}
+
+export interface FullSpriteSheetFrameRegion extends ExportedFrameRegion {
+  animationId: AnimationId
+  animationName: string
+  rowIndex: number
+  columnIndex: number
+}
+
+export interface FullSpriteSheetAnimationMetadata {
+  animationId: AnimationId
+  animationName: string
+  rowIndex: number
+  frameCount: number
+  fps: number
+  loop: boolean
+  frames: FullSpriteSheetFrameRegion[]
 }
 
 export interface ExportedLayerMetadata {
@@ -128,6 +162,29 @@ export interface SpriteSheetLayout {
   hitbox?: Hitbox
   layers: ExportedLayerMetadata[]
   frames: ExportedFrameRegion[]
+  grid: SpriteSheetGridMetadata
+  importHints: SpriteSheetImportHints
+}
+
+export interface FullSpriteSheetLayout {
+  imageFilename: string
+  orientation: 'rows'
+  scale: number
+  margin: number
+  spacing: number
+  background: 'transparent'
+  sourceFrameWidth: number
+  sourceFrameHeight: number
+  frameWidth: number
+  frameHeight: number
+  sheetWidth: number
+  sheetHeight: number
+  rowCount: number
+  columnCount: number
+  animations: FullSpriteSheetAnimationMetadata[]
+  frames: FullSpriteSheetFrameRegion[]
+  grid: SpriteSheetGridMetadata
+  importHints: SpriteSheetImportHints
 }
 
 export interface SpriteSheetExportMetadata extends SpriteSheetLayout {
@@ -138,6 +195,36 @@ export interface SpriteSheetExportMetadata extends SpriteSheetLayout {
   projectDescription?: string
   assetType?: SpriteAssetType
   generatedAt: string
+}
+
+export interface FullSpriteSheetExportMetadata extends FullSpriteSheetLayout {
+  formatName: 'SpriteWrite'
+  formatVersion: number
+  projectId: string
+  projectName: string
+  projectDescription?: string
+  assetType?: SpriteAssetType
+  generatedAt: string
+}
+
+export interface SpriteSheetGridMetadata {
+  columns: number
+  rows: number
+  originX: number
+  originY: number
+  cellWidth: number
+  cellHeight: number
+  margin: number
+  spacing: number
+}
+
+export interface SpriteSheetImportHints {
+  alpha: 'straight'
+  transparentBackground: true
+  premultipliedAlpha: false
+  smoothing: false
+  frameRegionUnit: 'pixels'
+  frameRegionBasis: 'top-left'
 }
 
 export interface FrameExportMetadata {

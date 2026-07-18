@@ -2,6 +2,9 @@ import { getAnimation, getFrame } from './spriteData'
 import type {
   AnimationId,
   FrameExportMetadata,
+  FullSpriteSheetExportMetadata,
+  FullSpriteSheetExportOptions,
+  FullSpriteSheetLayout,
   SpriteProject,
   SpriteSheetExportMetadata,
   SpriteSheetExportOptions,
@@ -22,6 +25,15 @@ export interface ResolvedSpriteSheetExportOptions {
   includeMetadata: boolean
 }
 
+export interface ResolvedFullSpriteSheetExportOptions {
+  scale: number
+  margin: number
+  spacing: number
+  background: 'transparent'
+  includeMetadata: boolean
+  imageFilename: string
+}
+
 export function resolveSpriteSheetExportOptions(
   options: SpriteSheetExportOptions,
 ): ResolvedSpriteSheetExportOptions {
@@ -40,7 +52,7 @@ export function resolveSpriteSheetExportOptions(
   }
 
   if (resolved.orientation !== 'horizontal') {
-    throw new Error('Only horizontal spritesheet export is supported right now.')
+    throw new Error('Only horizontal animation strip export is supported right now.')
   }
 
   if (resolved.background !== 'transparent') {
@@ -55,6 +67,39 @@ export function resolveSpriteSheetExportOptions(
   }
 
   return resolved
+}
+
+export function resolveFullSpriteSheetExportOptions(
+  options: FullSpriteSheetExportOptions = {},
+): ResolvedFullSpriteSheetExportOptions {
+  const resolved = {
+    scale: options.scale ?? 1,
+    margin: options.margin ?? 0,
+    spacing: options.spacing ?? 0,
+    background: options.background ?? 'transparent',
+    includeMetadata: options.includeMetadata ?? true,
+    imageFilename: options.imageFilename ?? 'sprite-sheet.png',
+  }
+
+  if (resolved.background !== 'transparent') {
+    throw new Error('Only transparent export background is supported right now.')
+  }
+
+  if (typeof resolved.imageFilename !== 'string' || resolved.imageFilename.trim() === '') {
+    throw new Error('Full sprite sheet export requires an image filename.')
+  }
+
+  validateNonNegativeInteger(resolved.margin, 'margin')
+  validateNonNegativeInteger(resolved.spacing, 'spacing')
+
+  if (!Number.isInteger(resolved.scale) || resolved.scale < 1 || resolved.scale > 16) {
+    throw new Error('Export scale must be an integer from 1 to 16.')
+  }
+
+  return {
+    ...resolved,
+    imageFilename: resolved.imageFilename.trim(),
+  }
 }
 
 export function createSpriteSheetLayout(
@@ -137,6 +182,128 @@ export function createSpriteSheetLayout(
     hitbox: firstFrame.hitbox,
     layers,
     frames,
+    grid: {
+      columns: frameCount,
+      rows: 1,
+      originX: resolved.margin,
+      originY: resolved.margin,
+      cellWidth: frameWidth,
+      cellHeight: frameHeight,
+      margin: resolved.margin,
+      spacing: resolved.spacing,
+    },
+    importHints: {
+      alpha: 'straight',
+      transparentBackground: true,
+      premultipliedAlpha: false,
+      smoothing: false,
+      frameRegionUnit: 'pixels',
+      frameRegionBasis: 'top-left',
+    },
+  }
+}
+
+export function createFullSpriteSheetLayout(
+  project: SpriteProject,
+  options: FullSpriteSheetExportOptions = {},
+): FullSpriteSheetLayout {
+  const resolved = resolveFullSpriteSheetExportOptions(options)
+
+  if (!project.animations.length) {
+    throw new Error('Full sprite sheet export requires at least one animation.')
+  }
+
+  const sourceFrameWidth = project.canvas.width
+  const sourceFrameHeight = project.canvas.height
+  const frameWidth = sourceFrameWidth * resolved.scale
+  const frameHeight = sourceFrameHeight * resolved.scale
+  const rowCount = project.animations.length
+  const columnCount = Math.max(...project.animations.map((animation) => animation.frameIds.length))
+
+  if (columnCount <= 0) {
+    throw new Error('Full sprite sheet export requires at least one frame.')
+  }
+
+  const sheetWidth = resolved.margin * 2 + frameWidth * columnCount + resolved.spacing * Math.max(0, columnCount - 1)
+  const sheetHeight = resolved.margin * 2 + frameHeight * rowCount + resolved.spacing * Math.max(0, rowCount - 1)
+
+  const animations = project.animations.map((animation, rowIndex) => {
+    if (!animation.frameIds.length) {
+      throw new Error(`Animation "${animation.id}" has no frames.`)
+    }
+
+    const frames = animation.frameIds.map((frameId, columnIndex) => {
+      const frame = getFrame(project, frameId)
+      if (!frame) {
+        throw new Error(`Animation "${animation.id}" references missing frame "${frameId}".`)
+      }
+
+      return {
+        animationId: animation.id,
+        animationName: animation.name,
+        frameId,
+        frameName: frame.name,
+        index: columnIndex,
+        rowIndex,
+        columnIndex,
+        x: resolved.margin + columnIndex * (frameWidth + resolved.spacing),
+        y: resolved.margin + rowIndex * (frameHeight + resolved.spacing),
+        width: frameWidth,
+        height: frameHeight,
+        durationMs: frame.durationMs,
+        notes: frame.notes,
+        tags: frame.tags,
+        anchor: frame.anchor,
+        hitbox: frame.hitbox,
+      }
+    })
+
+    return {
+      animationId: animation.id,
+      animationName: animation.name,
+      rowIndex,
+      frameCount: animation.frameIds.length,
+      fps: animation.fps,
+      loop: true,
+      frames,
+    }
+  })
+
+  return {
+    imageFilename: resolved.imageFilename,
+    orientation: 'rows',
+    scale: resolved.scale,
+    margin: resolved.margin,
+    spacing: resolved.spacing,
+    background: resolved.background,
+    sourceFrameWidth,
+    sourceFrameHeight,
+    frameWidth,
+    frameHeight,
+    sheetWidth,
+    sheetHeight,
+    rowCount,
+    columnCount,
+    animations,
+    frames: animations.flatMap((animation) => animation.frames),
+    grid: {
+      columns: columnCount,
+      rows: rowCount,
+      originX: resolved.margin,
+      originY: resolved.margin,
+      cellWidth: frameWidth,
+      cellHeight: frameHeight,
+      margin: resolved.margin,
+      spacing: resolved.spacing,
+    },
+    importHints: {
+      alpha: 'straight',
+      transparentBackground: true,
+      premultipliedAlpha: false,
+      smoothing: false,
+      frameRegionUnit: 'pixels',
+      frameRegionBasis: 'top-left',
+    },
   }
 }
 
@@ -154,6 +321,22 @@ export function createSpriteSheetExportMetadata(
     assetType: project.assetType,
     generatedAt: new Date().toISOString(),
     ...createSpriteSheetLayout(project, animationId, options),
+  }
+}
+
+export function createFullSpriteSheetExportMetadata(
+  project: SpriteProject,
+  options: FullSpriteSheetExportOptions = {},
+): FullSpriteSheetExportMetadata {
+  return {
+    formatName: SPRITEWRITE_EXPORT_FORMAT_NAME,
+    formatVersion: SPRITEWRITE_EXPORT_FORMAT_VERSION,
+    projectId: project.id,
+    projectName: project.name,
+    projectDescription: project.description,
+    assetType: project.assetType,
+    generatedAt: new Date().toISOString(),
+    ...createFullSpriteSheetLayout(project, options),
   }
 }
 

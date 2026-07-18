@@ -6,7 +6,7 @@ purpose: Durable system shape, boundaries, data flow, invariants, and danger zon
 belongs-here: components, boundaries, canonical data model, invariants, current and intended architecture, known violations, retired approaches.
 not-here: volatile roadmap, command reference, complete feature history.
 durability: stable; update when system shape or invariants change.
-read-with: SOT; Maintainer Guide; docs/APP_FLOW.md; docs/EXPORT_CONTRACT.md; docs/AI_PATCH_DOCTRINE.md.
+read-with: SOT; Maintainer Guide; docs/PRODUCT_VISION.md; docs/APP_FLOW.md; docs/EXPORT_CONTRACT.md; docs/AI_PATCH_DOCTRINE.md.
 update-when: core data model, module boundaries, export pipeline, provider architecture, or architectural constraints change.
 agent-guidance: Prefer existing patterns. Keep project data canonical. Do not introduce hidden state, opaque raster sources, or unnecessary infrastructure.
 ---
@@ -31,6 +31,7 @@ Key model concepts:
 
 - Canvas dimensions.
 - Fixed palette of `PaletteColor` IDs.
+- Optional broad asset type such as character, creature, tile, environment, prop, object, background, effect, UI, icon, or custom.
 - Animations with ordered frame IDs.
 - Frames with duration, anchor, optional hitbox, and layers.
 - Layers with sparse `"x,y": "colorId"` cell maps.
@@ -39,13 +40,15 @@ Key model concepts:
 
 Canvas, preview thumbnails, onion skin, checkerboards, grid lines, selection state, and PNG output are derived views.
 
+The model is engine-neutral. OozeTactics and Godot can consume exported artifacts, but neither one defines the internal project format. Asset recipes/templates may provide canvas size, palette, layers, frame counts, timing, anchors, export defaults, and AI guidance, but those values are editable project data rather than locked engine assumptions.
+
 ## Module Boundaries
 
 - `src/domain/spriteTypes.ts`: core TypeScript types.
 - `src/domain/spriteData.ts`: project creation, validation, patch validation/apply, and pure project transformations.
 - `src/domain/projectTemplates.ts`: template definitions for new projects.
 - `src/domain/rendering.ts`: preview composition from project data.
-- `src/domain/exportPlanning.ts`: deterministic spritesheet layout and metadata planning.
+- `src/domain/exportPlanning.ts`: deterministic sprite sheet layout and metadata planning.
 - `src/domain/exportRaster.ts`: pure RGBA export rendering.
 - `src/providers/*`: AI patch provider contracts and implementations.
 - `src/utils/canvasExport.ts`: browser canvas/blob wrappers around the tested RGBA export buffer.
@@ -66,10 +69,26 @@ Patch Assistant:
 instruction + project context -> provider -> PixelPatchOperation[] -> validate -> preview -> include/exclude/remove -> apply or reject
 ```
 
+Prompt intent padding:
+
+```text
+plain user request -> SpriteWrite prompt intent -> selected-frame patch, single-frame draft, or animation draft provider rail
+```
+
+SpriteWrite, not the user, is responsible for padding natural requests into constrained provider instructions with canvas dimensions, palette IDs, frame-count expectations, and output-shape rules.
+
+Broad animation draft:
+
+```text
+whole-asset instruction + project context -> provider -> frame patch arrays -> validate/coherence check -> replace selected animation row or reject without mutation
+```
+
+Future AI operations should use the same principle: a provider may suggest editable frame grids, palette changes, duplicated-and-modified frames, or explicit layer operations, but the app must validate and present them for user acceptance before mutation.
+
 PNG export:
 
 ```text
-SpriteProject -> createSpriteSheetLayout() -> render*ToRgbaBuffer() -> ImageData/canvas -> PNG blob
+SpriteProject -> createSpriteSheetLayout() or createFullSpriteSheetLayout() -> render*ToRgbaBuffer() -> ImageData/canvas -> PNG blob
 ```
 
 Project save:
@@ -86,12 +105,19 @@ SpriteProject -> Project JSON export
 - Patch validation must reject out-of-bounds cells, unknown colors, malformed operations, missing animations/frames/layers, and locked layer edits.
 - Exported PNGs must not contain editor grid, checkerboard, onion skin, selection, or patch-preview overlays.
 - Only layers that are both visible and exportable should render into PNG output.
-- Export metadata must match the actual spritesheet layout.
+- Export metadata must match the actual sprite sheet layout.
+- Animation Strip export is one selected animation in a horizontal row.
+- Full Sprite Sheet export is a fixed row/column grid: one animation per row, one frame per column, transparent padding after shorter animations. It is not a Packed Atlas.
+- Export profiles should be generic first. Godot, Unity, or custom importer profiles can layer on top of the boring PNG/JSON contract later.
 - Provider failures and invalid provider output must not break the app.
 
 ## Provider Architecture
 
-`AiPatchProvider` is the seam for patch proposal providers. The Mock provider is deterministic and local. The Ollama provider is experimental and should return JSON patch operations only.
+`AiPatchProvider` is the seam for selected-frame patch proposal providers. The Mock provider is deterministic and local. The Ollama provider is experimental and may also expose a structured animation-draft method that returns frame patch arrays. Current provider rails return JSON cell operations.
+
+`src/providers/spriteWritePromptIntent.ts` is the small interpretation layer between plain user prompts and provider calls. It currently classifies prompts as selected-frame patches, single-frame drafts, or 3-6 frame animation drafts, then pads the instruction with SpriteWrite constraints before Ollama sees it. Users should not need to manually write provider-contract prompts.
+
+Future rails may add structured palette or layer operations, but must remain reviewable, reversible, and derived into `SpriteProject` data before export.
 
 Do not import or depend on Cuddler or OllamaSaddle. Future integrations should hand SpriteWrite structured patch requests/results, not image prompts or opaque raster blobs.
 
@@ -103,4 +129,3 @@ Do not import or depend on Cuddler or OllamaSaddle. Future integrations should h
 - Changing `SpriteProject` shape without updating validation, templates, exports, metadata, tests, and docs.
 - Confusing editor visibility with export inclusion.
 - Overwriting uncommitted work; this repo currently appears to be work in progress.
-

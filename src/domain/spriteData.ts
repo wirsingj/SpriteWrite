@@ -23,12 +23,19 @@ export const MAX_CANVAS_SIZE = 256
 const DEFAULT_TIMESTAMP = '2026-06-19T00:00:00.000Z'
 const ASSET_TYPES = new Set<SpriteAssetType>([
   'character',
+  'creature',
+  'tile',
+  'environment',
+  'prop',
+  'object',
+  'background',
+  'effect',
+  'ui',
+  'icon',
+  'custom',
   'enemy',
   'ooze',
-  'icon',
-  'ui',
   'button',
-  'background',
   'parallax',
   'generic',
 ])
@@ -1079,6 +1086,44 @@ export function moveAnimationInProject(
   return touchProject(nextProject)
 }
 
+export function moveFrameInAnimation(
+  project: SpriteProject,
+  animationId: AnimationId,
+  frameId: FrameId,
+  targetIndex: number,
+): SpriteProject {
+  const animation = getAnimation(project, animationId)
+  if (!animation) {
+    throw new Error(`Missing animation "${animationId}".`)
+  }
+
+  const sourceIndex = animation.frameIds.indexOf(frameId)
+  if (sourceIndex < 0) {
+    throw new Error(`Animation "${animationId}" does not contain frame "${frameId}".`)
+  }
+
+  if (!Number.isInteger(targetIndex)) {
+    throw new Error('Frame target index must be an integer.')
+  }
+
+  const clampedTargetIndex = Math.max(0, Math.min(animation.frameIds.length - 1, targetIndex))
+  if (sourceIndex === clampedTargetIndex) {
+    return cloneProject(project)
+  }
+
+  const nextProject = cloneProject(project)
+  const nextAnimation = getAnimation(nextProject, animationId)
+  if (!nextAnimation) {
+    throw new Error(`Animation "${animationId}" disappeared during frame reorder.`)
+  }
+
+  const [movedFrameId] = nextAnimation.frameIds.splice(sourceIndex, 1)
+  const insertionIndex = Math.min(clampedTargetIndex, nextAnimation.frameIds.length)
+  nextAnimation.frameIds.splice(insertionIndex, 0, movedFrameId)
+
+  return touchProject(nextProject)
+}
+
 export function updateFramePropertiesInProject(
   project: SpriteProject,
   frameId: FrameId,
@@ -1179,6 +1224,22 @@ export function updateFramePropertiesInProject(
   return touchProject(nextProject)
 }
 
+export function updateFramesPropertiesInProject(
+  project: SpriteProject,
+  frameIds: FrameId[],
+  properties: Partial<Pick<SpriteFrame, 'durationMs' | 'notes' | 'tags'>>,
+): SpriteProject {
+  if (!frameIds.length) {
+    throw new Error('At least one frame is required for a batch frame update.')
+  }
+
+  const uniqueFrameIds = Array.from(new Set(frameIds))
+  return uniqueFrameIds.reduce(
+    (nextProject, frameId) => updateFramePropertiesInProject(nextProject, frameId, properties),
+    project,
+  )
+}
+
 export function setFrameHitboxInProject(
   project: SpriteProject,
   frameId: FrameId,
@@ -1245,6 +1306,23 @@ function makeOozePalette(): PaletteColor[] {
     { id: 'slime_highlight', name: 'Slime Highlight', hex: '#d6ff93' },
     { id: 'core', name: 'Core', hex: '#78ffe4' },
     { id: 'shadow', name: 'Shadow', hex: '#1b3022' },
+  ]
+}
+
+function makeHeroPalette(): PaletteColor[] {
+  return [
+    { id: TRANSPARENT_COLOR_ID, name: 'Transparent', hex: '#00000000', isTransparent: true },
+    { id: 'ink', name: 'Ink', hex: '#121417' },
+    { id: 'charcoal', name: 'Charcoal', hex: '#29313a' },
+    { id: 'steel', name: 'Steel', hex: '#b8c7d4' },
+    { id: 'steel_light', name: 'Steel Light', hex: '#f0f8ff' },
+    { id: 'skin', name: 'Skin', hex: '#f0b983' },
+    { id: 'tunic', name: 'Tunic Blue', hex: '#3f7bd8' },
+    { id: 'tunic_light', name: 'Tunic Light', hex: '#78a8ff' },
+    { id: 'cape', name: 'Cape Red', hex: '#b8323f' },
+    { id: 'cape_dark', name: 'Cape Dark', hex: '#6f1d2b' },
+    { id: 'gold', name: 'Gold', hex: '#f2c14e' },
+    { id: 'shadow', name: 'Shadow', hex: '#172016' },
   ]
 }
 
@@ -1335,11 +1413,117 @@ function makeOozeCells(offsetY = 0): Record<string, ColorId> {
   return cells
 }
 
+interface HeroPoseOptions {
+  dx?: number
+  dy?: number
+  crouch?: number
+  capeShift?: number
+  swordReach?: number
+  swordY?: number
+  legTuck?: boolean
+  armBack?: boolean
+}
+
+function makeHeroCells({
+  dx = 0,
+  dy = 0,
+  crouch = 0,
+  capeShift = 0,
+  swordReach = 0,
+  swordY = 14,
+  legTuck = false,
+  armBack = false,
+}: HeroPoseOptions = {}): Record<string, ColorId> {
+  const cells: Record<string, ColorId> = {}
+  const set = (x: number, y: number, colorId: ColorId) => {
+    if (x >= 0 && x < 32 && y >= 0 && y < 32) {
+      cells[cellKey(x, y)] = colorId
+    }
+  }
+  const rect = (x: number, y: number, width: number, height: number, colorId: ColorId) => {
+    for (let row = 0; row < height; row += 1) {
+      for (let column = 0; column < width; column += 1) {
+        set(x + column + dx, y + row + dy, colorId)
+      }
+    }
+  }
+
+  const bodyTop = 12 + crouch
+  const bodyHeight = 6 - Math.min(crouch, 2)
+  const legTop = bodyTop + bodyHeight
+  const footY = legTuck ? legTop + 3 : 24
+
+  for (let x = 10; x <= 22; x += 1) {
+    if (x >= 12 && x <= 20) {
+      set(x + dx, 26, 'shadow')
+    }
+  }
+
+  rect(11 - capeShift, bodyTop, 4, 9 - Math.min(crouch, 2), 'cape_dark')
+  rect(12 - capeShift, bodyTop + 1, 4, 8 - Math.min(crouch, 2), 'cape')
+  set(10 - capeShift + dx, bodyTop + 6 + dy, 'cape_dark')
+  set(11 - capeShift + dx, bodyTop + 7 + dy, 'cape_dark')
+
+  rect(14, 7 + crouch, 5, 1, 'ink')
+  rect(13, 8 + crouch, 7, 1, 'ink')
+  rect(13, 9 + crouch, 1, 3, 'ink')
+  rect(19, 9 + crouch, 1, 3, 'ink')
+  rect(14, 11 + crouch, 5, 1, 'ink')
+  rect(14, 9 + crouch, 5, 2, 'skin')
+  set(15 + dx, 10 + crouch + dy, 'ink')
+  set(18 + dx, 10 + crouch + dy, 'ink')
+  set(16 + dx, 11 + crouch + dy, 'skin')
+
+  rect(13, bodyTop, 7, 1, 'ink')
+  rect(13, bodyTop + 1, 1, bodyHeight, 'ink')
+  rect(19, bodyTop + 1, 1, bodyHeight, 'ink')
+  rect(14, bodyTop + bodyHeight, 5, 1, 'ink')
+  rect(14, bodyTop + 1, 5, bodyHeight - 1, 'tunic')
+  rect(15, bodyTop + 1, 3, 1, 'tunic_light')
+  rect(16, bodyTop + 3, 2, 1, 'gold')
+
+  if (armBack) {
+    rect(11, bodyTop + 2, 3, 1, 'charcoal')
+    rect(10, bodyTop + 3, 2, 1, 'skin')
+  } else {
+    rect(11, bodyTop + 2, 3, 1, 'charcoal')
+    set(10 + dx, bodyTop + 3 + dy, 'skin')
+  }
+
+  const swordStart = 20
+  rect(19, swordY, 2, 2, 'gold')
+  rect(20, swordY + 1, Math.max(2, swordReach + 2), 1, 'steel')
+  if (swordReach > 1) {
+    rect(22, swordY, swordReach, 1, 'steel_light')
+    set(22 + swordReach + dx, swordY + 1 + dy, 'steel_light')
+  }
+  set(swordStart + swordReach + 2 + dx, swordY + 1 + dy, 'ink')
+
+  if (legTuck) {
+    rect(14, legTop, 2, 4, 'charcoal')
+    rect(17, legTop, 2, 3, 'charcoal')
+    rect(13, legTop + 3, 3, 1, 'ink')
+    rect(18, legTop + 2, 3, 1, 'ink')
+  } else if (crouch > 0) {
+    rect(13, legTop, 3, 4, 'charcoal')
+    rect(17, legTop, 3, 4, 'charcoal')
+    rect(12, footY, 4, 1, 'ink')
+    rect(18, footY, 4, 1, 'ink')
+  } else {
+    rect(14, legTop, 2, 6, 'charcoal')
+    rect(17, legTop, 2, 6, 'charcoal')
+    rect(13, footY, 3, 1, 'ink')
+    rect(17, footY, 4, 1, 'ink')
+  }
+
+  return cells
+}
+
 export function createBlankProject({
   name,
   width,
   height,
-  assetType = 'generic',
+  assetType = 'custom',
   description,
 }: {
   name: string
@@ -1427,7 +1611,7 @@ export function createOozeDemoProject(name = 'Ooze Sprite Starter'): SpriteProje
     id: 'spritewrite-ooze-default',
     name,
     description: 'A small 32x32 ooze demo asset for testing SpriteWrite workflows.',
-    assetType: 'ooze',
+    assetType: 'creature',
     version: 1,
     canvas: {
       width: 32,
@@ -1450,6 +1634,255 @@ export function createOozeDemoProject(name = 'Ooze Sprite Starter'): SpriteProje
       updatedAt: DEFAULT_TIMESTAMP,
       notes:
         'Transparent pixels are omitted from layer cell maps. A visible cell is stored as "x,y": "colorId".',
+    },
+  }
+}
+
+export function createHeroDemoProject(name = 'Hero Sprite Demo'): SpriteProject {
+  const frameSpecs: Array<{
+    id: FrameId
+    animationId: AnimationId
+    name: string
+    durationMs: number
+    notes: string
+    tags: string[]
+    pose: HeroPoseOptions
+    hitbox: Hitbox
+  }> = [
+    {
+      id: 'idle-001',
+      animationId: 'idle',
+      name: 'Idle 001',
+      durationMs: 180,
+      notes: 'Neutral standing pose with cape at rest.',
+      tags: ['idle', 'hero', 'cape'],
+      pose: { dy: 0, capeShift: 0, swordReach: 0, swordY: 15 },
+      hitbox: { x: 10, y: 7, width: 14, height: 19 },
+    },
+    {
+      id: 'idle-002',
+      animationId: 'idle',
+      name: 'Idle 002',
+      durationMs: 180,
+      notes: 'Breathing lift, cape trails slightly.',
+      tags: ['idle', 'hero', 'cape'],
+      pose: { dy: -1, capeShift: 0, swordReach: 0, swordY: 14 },
+      hitbox: { x: 10, y: 6, width: 14, height: 20 },
+    },
+    {
+      id: 'idle-003',
+      animationId: 'idle',
+      name: 'Idle 003',
+      durationMs: 180,
+      notes: 'Return pose with sword hand steady.',
+      tags: ['idle', 'hero', 'cape'],
+      pose: { dy: 0, capeShift: 1, swordReach: 0, swordY: 15 },
+      hitbox: { x: 9, y: 7, width: 15, height: 19 },
+    },
+    {
+      id: 'idle-004',
+      animationId: 'idle',
+      name: 'Idle 004',
+      durationMs: 180,
+      notes: 'Low breathing frame before loop.',
+      tags: ['idle', 'hero', 'cape'],
+      pose: { dy: 1, capeShift: 0, swordReach: 0, swordY: 16 },
+      hitbox: { x: 10, y: 8, width: 14, height: 18 },
+    },
+    {
+      id: 'jump-001',
+      animationId: 'jump',
+      name: 'Jump 001',
+      durationMs: 140,
+      notes: 'Anticipation crouch before takeoff.',
+      tags: ['jump', 'anticipation', 'hero'],
+      pose: { dy: 1, crouch: 2, capeShift: 0, swordReach: 0, swordY: 17 },
+      hitbox: { x: 10, y: 10, width: 14, height: 16 },
+    },
+    {
+      id: 'jump-002',
+      animationId: 'jump',
+      name: 'Jump 002',
+      durationMs: 120,
+      notes: 'Takeoff frame, cape drops behind.',
+      tags: ['jump', 'takeoff', 'hero'],
+      pose: { dy: -2, capeShift: -1, swordReach: 0, swordY: 13, legTuck: true },
+      hitbox: { x: 10, y: 5, width: 15, height: 18 },
+    },
+    {
+      id: 'jump-003',
+      animationId: 'jump',
+      name: 'Jump 003',
+      durationMs: 160,
+      notes: 'Apex frame with tucked legs.',
+      tags: ['jump', 'apex', 'hero'],
+      pose: { dy: -5, capeShift: -1, swordReach: 1, swordY: 10, legTuck: true },
+      hitbox: { x: 10, y: 2, width: 16, height: 18 },
+    },
+    {
+      id: 'jump-004',
+      animationId: 'jump',
+      name: 'Jump 004',
+      durationMs: 120,
+      notes: 'Falling frame, sword returns forward.',
+      tags: ['jump', 'fall', 'hero'],
+      pose: { dy: -2, capeShift: 1, swordReach: 1, swordY: 13, legTuck: true },
+      hitbox: { x: 9, y: 5, width: 17, height: 18 },
+    },
+    {
+      id: 'jump-005',
+      animationId: 'jump',
+      name: 'Jump 005',
+      durationMs: 150,
+      notes: 'Landing compression frame.',
+      tags: ['jump', 'landing', 'hero'],
+      pose: { dy: 1, crouch: 1, capeShift: 1, swordReach: 0, swordY: 16 },
+      hitbox: { x: 9, y: 9, width: 16, height: 17 },
+    },
+    {
+      id: 'crouch-001',
+      animationId: 'crouch',
+      name: 'Crouch 001',
+      durationMs: 160,
+      notes: 'Start lowering into crouch.',
+      tags: ['crouch', 'hero'],
+      pose: { dy: 1, crouch: 1, capeShift: 0, swordReach: 0, swordY: 16 },
+      hitbox: { x: 10, y: 9, width: 14, height: 17 },
+    },
+    {
+      id: 'crouch-002',
+      animationId: 'crouch',
+      name: 'Crouch 002',
+      durationMs: 220,
+      notes: 'Held crouch pose with wider stance.',
+      tags: ['crouch', 'hold', 'hero'],
+      pose: { dy: 2, crouch: 2, capeShift: 1, swordReach: 0, swordY: 17 },
+      hitbox: { x: 9, y: 10, width: 16, height: 16 },
+    },
+    {
+      id: 'crouch-003',
+      animationId: 'crouch',
+      name: 'Crouch 003',
+      durationMs: 160,
+      notes: 'Recovery from crouch.',
+      tags: ['crouch', 'recovery', 'hero'],
+      pose: { dy: 1, crouch: 1, capeShift: 0, swordReach: 0, swordY: 16 },
+      hitbox: { x: 10, y: 9, width: 14, height: 17 },
+    },
+    {
+      id: 'sword-stab-001',
+      animationId: 'sword_stab',
+      name: 'Sword Stab 001',
+      durationMs: 120,
+      notes: 'Windup with arm pulled back.',
+      tags: ['attack', 'sword', 'windup', 'hero'],
+      pose: { dy: 0, capeShift: 1, swordReach: 0, swordY: 15, armBack: true },
+      hitbox: { x: 9, y: 7, width: 15, height: 19 },
+    },
+    {
+      id: 'sword-stab-002',
+      animationId: 'sword_stab',
+      name: 'Sword Stab 002',
+      durationMs: 90,
+      notes: 'Sword begins extending.',
+      tags: ['attack', 'sword', 'thrust', 'hero'],
+      pose: { dx: 1, dy: 0, capeShift: 1, swordReach: 3, swordY: 14 },
+      hitbox: { x: 10, y: 7, width: 18, height: 19 },
+    },
+    {
+      id: 'sword-stab-003',
+      animationId: 'sword_stab',
+      name: 'Sword Stab 003',
+      durationMs: 90,
+      notes: 'Full extension with readable sword reach.',
+      tags: ['attack', 'sword', 'contact', 'hero'],
+      pose: { dx: 2, dy: 0, capeShift: 2, swordReach: 6, swordY: 14 },
+      hitbox: { x: 11, y: 7, width: 20, height: 19 },
+    },
+    {
+      id: 'sword-stab-004',
+      animationId: 'sword_stab',
+      name: 'Sword Stab 004',
+      durationMs: 120,
+      notes: 'Held contact frame.',
+      tags: ['attack', 'sword', 'hold', 'hero'],
+      pose: { dx: 2, dy: 0, capeShift: 2, swordReach: 6, swordY: 15 },
+      hitbox: { x: 11, y: 7, width: 20, height: 19 },
+    },
+    {
+      id: 'sword-stab-005',
+      animationId: 'sword_stab',
+      name: 'Sword Stab 005',
+      durationMs: 140,
+      notes: 'Recovery back toward idle stance.',
+      tags: ['attack', 'sword', 'recovery', 'hero'],
+      pose: { dx: 1, dy: 0, capeShift: 1, swordReach: 2, swordY: 15 },
+      hitbox: { x: 10, y: 7, width: 17, height: 19 },
+    },
+  ]
+
+  const frames = frameSpecs.map<SpriteFrame>((spec) => ({
+    id: spec.id,
+    name: spec.name,
+    durationMs: spec.durationMs,
+    notes: spec.notes,
+    tags: spec.tags,
+    layers: [makeBaseLayer(makeHeroCells(spec.pose))],
+    anchor: { x: 16, y: 25 },
+    hitbox: spec.hitbox,
+  }))
+
+  return {
+    id: 'spritewrite-hero-demo',
+    name,
+    description: 'A 32x32 multi-row hero sprite sheet demo for testing animation and export workflows.',
+    assetType: 'character',
+    version: 1,
+    canvas: {
+      width: 32,
+      height: 32,
+    },
+    palette: makeHeroPalette(),
+    animations: [
+      {
+        id: 'idle',
+        name: 'Idle',
+        fps: 6,
+        frameIds: ['idle-001', 'idle-002', 'idle-003', 'idle-004'],
+      },
+      {
+        id: 'jump',
+        name: 'Jump',
+        fps: 8,
+        frameIds: ['jump-001', 'jump-002', 'jump-003', 'jump-004', 'jump-005'],
+      },
+      {
+        id: 'crouch',
+        name: 'Crouch',
+        fps: 6,
+        frameIds: ['crouch-001', 'crouch-002', 'crouch-003'],
+      },
+      {
+        id: 'sword_stab',
+        name: 'Sword Stab',
+        fps: 10,
+        frameIds: [
+          'sword-stab-001',
+          'sword-stab-002',
+          'sword-stab-003',
+          'sword-stab-004',
+          'sword-stab-005',
+        ],
+      },
+    ],
+    frames,
+    metadata: {
+      defaultAnimationId: 'idle',
+      defaultLayerId: 'base',
+      createdAt: DEFAULT_TIMESTAMP,
+      updatedAt: DEFAULT_TIMESTAMP,
+      notes:
+        'Hero demo is structured grid data. Use Full Sheet to inspect rows, edit individual frames, and export clean PNG sheets.',
     },
   }
 }

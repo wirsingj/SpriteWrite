@@ -5,6 +5,7 @@ import {
   addAnimationToProject,
   addPaletteColorToProject,
   cellKey,
+  createBlankProject,
   createDefaultProject,
   deleteAnimationFromProject,
   deleteLayerFromProject,
@@ -13,6 +14,7 @@ import {
   getFrame,
   getLayer,
   moveAnimationInProject,
+  moveFrameInAnimation,
   moveLayerInProject,
   movePaletteColorInProject,
   setFrameHitboxInProject,
@@ -20,11 +22,12 @@ import {
   updateLayerPropertiesInProject,
   updateAnimationPropertiesInProject,
   updateFramePropertiesInProject,
+  updateFramesPropertiesInProject,
   updatePaletteColorInProject,
   validateProject,
   validatePatch,
 } from './spriteData'
-import type { PixelPatchOperation } from './spriteTypes'
+import type { PixelPatchOperation, SpriteAssetType } from './spriteTypes'
 
 describe('sprite data model', () => {
   it('validates the default project for import', () => {
@@ -36,6 +39,33 @@ describe('sprite data model', () => {
       expect(result.value).toEqual(project)
       expect(result.value).not.toBe(project)
     }
+  })
+
+  it('validates broad formal asset categories', () => {
+    const assetTypes: SpriteAssetType[] = [
+      'character',
+      'creature',
+      'tile',
+      'environment',
+      'prop',
+      'object',
+      'background',
+      'effect',
+      'ui',
+      'icon',
+      'custom',
+    ]
+
+    assetTypes.forEach((assetType) => {
+      const project = createBlankProject({
+        name: `${assetType} draft`,
+        width: 32,
+        height: 32,
+        assetType,
+      })
+
+      expect(validateProject(project).valid).toBe(true)
+    })
   })
 
   it('rejects non-object project input', () => {
@@ -291,6 +321,17 @@ describe('sprite data model', () => {
     expect(result.errors.join('\n')).toContain('Missing layer')
   })
 
+  it('rejects edits against locked layers', () => {
+    const project = createDefaultProject()
+    project.frames[0].layers[0].editable = false
+
+    const result = validatePatch(project, 'idle', 'idle-001', 'base', [
+      { op: 'set', x: 1, y: 1, colorId: 'slime_mid' },
+    ])
+
+    expect(result.valid).toBe(false)
+    expect(result.errors.join('\n')).toContain('not editable')
+  })
   it('sets and clears cells through applyPatch without mutating the original project', () => {
     const project = createDefaultProject()
     const setPatch: PixelPatchOperation[] = [{ op: 'set', x: 4, y: 5, colorId: 'core' }]
@@ -539,6 +580,25 @@ describe('sprite data model', () => {
     expect(validateProject(nextProject).valid).toBe(true)
   })
 
+  it('moves frames inside an animation without mutating the original project', () => {
+    const project = createDefaultProject()
+    const nextProject = moveFrameInAnimation(project, 'idle', 'idle-002', 0)
+    const movedFirstProject = moveFrameInAnimation(project, 'idle', 'idle-001', 1)
+
+    expect(project.animations[0].frameIds).toEqual(['idle-001', 'idle-002'])
+    expect(nextProject.animations[0].frameIds).toEqual(['idle-002', 'idle-001'])
+    expect(movedFirstProject.animations[0].frameIds).toEqual(['idle-002', 'idle-001'])
+    expect(validateProject(nextProject).valid).toBe(true)
+  })
+
+  it('rejects invalid frame reorder targets', () => {
+    const project = createDefaultProject()
+
+    expect(() => moveFrameInAnimation(project, 'missing', 'idle-001', 0)).toThrow('Missing animation')
+    expect(() => moveFrameInAnimation(project, 'idle', 'missing-frame', 0)).toThrow('does not contain frame')
+    expect(() => moveFrameInAnimation(project, 'idle', 'idle-001', 1.5)).toThrow('target index')
+  })
+
   it('updates frame name, duration, notes, tags, and anchor', () => {
     const project = createDefaultProject()
     const nextProject = updateFramePropertiesInProject(project, 'idle-001', {
@@ -555,6 +615,29 @@ describe('sprite data model', () => {
       notes: 'Hold the readable squash silhouette.',
       tags: ['idle', 'squash'],
       anchor: { x: 10, y: 20 },
+    })
+    expect(validateProject(nextProject).valid).toBe(true)
+  })
+
+  it('updates metadata across multiple frames without mutating the original project', () => {
+    const project = createDefaultProject()
+    const nextProject = updateFramesPropertiesInProject(project, ['idle-001', 'idle-002'], {
+      durationMs: 333,
+      notes: 'Shared timing note.',
+      tags: ['hold', 'timing'],
+    })
+
+    expect(getFrame(project, 'idle-001')?.durationMs).not.toBe(333)
+    expect(getFrame(project, 'idle-002')?.durationMs).not.toBe(333)
+    expect(getFrame(nextProject, 'idle-001')).toMatchObject({
+      durationMs: 333,
+      notes: 'Shared timing note.',
+      tags: ['hold', 'timing'],
+    })
+    expect(getFrame(nextProject, 'idle-002')).toMatchObject({
+      durationMs: 333,
+      notes: 'Shared timing note.',
+      tags: ['hold', 'timing'],
     })
     expect(validateProject(nextProject).valid).toBe(true)
   })

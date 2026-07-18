@@ -33,7 +33,9 @@ describe('App shell', () => {
     })
 
     expect(container.textContent).toContain('SpriteWrite')
+    expect(container.textContent).toContain('Draw static or animated pixel assets')
     expect(container.textContent).toContain('Blank 64x64')
+    expect(container.textContent).toContain('Hero 32x32 Sprite Sheet Demo')
     expect(container.textContent).toContain('Ooze 32x32 Demo')
   })
 
@@ -46,7 +48,540 @@ describe('App shell', () => {
     clickButton('New Project')
 
     expect(container.textContent).toContain('64x64 cells')
-    expect(container.textContent).toContain('Export scale')
+    expect(container.textContent).toContain('Ask / Start')
+    expect(container.textContent).toContain('Sprite Sheet Rows')
+    expect(container.textContent).toContain('Export Plan')
+    expect(container.textContent).toContain('Production outputs')
+    expect(container.textContent).toContain('Preview')
+    expect(container.textContent).toContain('Frame Details')
+    expect(container.textContent).toContain('Top strip controls sheet order')
+    expect(container.textContent).toContain('Optional structured edit proposals')
+  })
+
+  it('selects frames from the atlas overview before detailed editing', () => {
+    act(() => {
+      root.render(<App />)
+    })
+
+    clickButton('New Project')
+    clickButton('Add Frame')
+
+    const atlasFrames = container.querySelectorAll<HTMLButtonElement>('.atlas-frame-strip button')
+    expect(atlasFrames).toHaveLength(2)
+
+    act(() => {
+      atlasFrames[1].click()
+    })
+
+    expect(getRequiredElement('.atlas-frame-strip button.active span').textContent).toBe('2')
+  })
+
+  it('switches between frame editing and the full sprite sheet workspace', () => {
+    act(() => {
+      root.render(<App />)
+    })
+
+    clickButton('New Project')
+    clickButton('Add Frame')
+    clickButton('Full Sheet')
+
+    expect(container.textContent).toContain('Full Sprite Sheet View')
+    expect(container.querySelectorAll('.sheet-row-strip button')).toHaveLength(2)
+
+    const sheetFrames = container.querySelectorAll<HTMLButtonElement>('.sheet-row-strip button')
+    act(() => {
+      sheetFrames[1].click()
+    })
+
+    expect(container.textContent).not.toContain('Full Sprite Sheet View')
+    expect(getRequiredElement('.pixel-grid')).toBeTruthy()
+    expect(getRequiredElement('.atlas-frame-strip button.active span').textContent).toBe('2')
+  })
+
+  it('multi-selects atlas frames with modifier clicks', () => {
+    act(() => {
+      root.render(<App />)
+    })
+
+    clickButton('New Project')
+    clickButton('Add Frame')
+    clickButton('Add Frame')
+
+    let atlasFrames = Array.from(container.querySelectorAll<HTMLButtonElement>('.atlas-frame-strip button'))
+    expect(atlasFrames).toHaveLength(3)
+    expect(atlasFrames.filter((button) => button.classList.contains('selected'))).toHaveLength(1)
+
+    act(() => {
+      atlasFrames[1].dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }))
+    })
+
+    atlasFrames = Array.from(container.querySelectorAll<HTMLButtonElement>('.atlas-frame-strip button'))
+    expect(atlasFrames.filter((button) => button.classList.contains('selected'))).toHaveLength(2)
+
+    act(() => {
+      atlasFrames[0].dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }))
+    })
+
+    atlasFrames = Array.from(container.querySelectorAll<HTMLButtonElement>('.atlas-frame-strip button'))
+    expect(atlasFrames.slice(0, 2).every((button) => button.classList.contains('selected'))).toBe(true)
+    expect(atlasFrames[2].classList.contains('selected')).toBe(false)
+  })
+
+  it('duplicates selected atlas frames as a batch', async () => {
+    act(() => {
+      root.render(<App />)
+    })
+
+    clickButton('New Project')
+    clickButton('Add Frame')
+
+    let atlasFrames = Array.from(container.querySelectorAll<HTMLButtonElement>('.atlas-frame-strip button'))
+    act(() => {
+      atlasFrames[0].dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }))
+    })
+
+    clickButton('Duplicate Selected')
+
+    expect(container.textContent).toContain('Duplicated 2 selected frames.')
+
+    const { capturedBlob } = setupDownloadCapture()
+    clickButton('Export Project JSON')
+    const exported = JSON.parse((await capturedBlob.current?.text()) ?? '{}') as {
+      animations: Array<{ id: string; frameIds: string[] }>
+      frames: Array<{ id: string; name: string }>
+    }
+    const idleFrameIds = exported.animations.find((animation) => animation.id === 'idle')?.frameIds ?? []
+
+    expect(idleFrameIds).toHaveLength(4)
+    expect(idleFrameIds.slice(0, 2)).toEqual(['idle-001', expect.any(String)])
+    expect(exported.frames.filter((frame) => frame.name.endsWith('Copy'))).toHaveLength(2)
+
+    atlasFrames = Array.from(container.querySelectorAll<HTMLButtonElement>('.atlas-frame-strip button'))
+    expect(atlasFrames.filter((button) => button.classList.contains('selected'))).toHaveLength(2)
+  })
+
+  it('deletes selected atlas frames without emptying the row', async () => {
+    act(() => {
+      root.render(<App />)
+    })
+
+    clickButton('New Project')
+    clickButton('Add Frame')
+    clickButton('Add Frame')
+
+    const atlasFrames = Array.from(container.querySelectorAll<HTMLButtonElement>('.atlas-frame-strip button'))
+    act(() => {
+      atlasFrames[1].dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }))
+    })
+
+    clickButton('Delete Selected')
+
+    expect(container.textContent).toContain('Deleted 2 selected frames.')
+
+    const { capturedBlob } = setupDownloadCapture()
+    clickButton('Export Project JSON')
+    const exported = JSON.parse((await capturedBlob.current?.text()) ?? '{}') as {
+      animations: Array<{ id: string; frameIds: string[] }>
+    }
+    const idleFrameIds = exported.animations.find((animation) => animation.id === 'idle')?.frameIds ?? []
+
+    expect(idleFrameIds).toEqual(['idle-001'])
+    expect(getButtonWithin('.atlas-actions', 'Delete Selected').disabled).toBe(true)
+  })
+
+  it('sets duration across selected atlas frames', async () => {
+    act(() => {
+      root.render(<App />)
+    })
+
+    clickButton('New Project')
+    clickButton('Add Frame')
+
+    const atlasFrames = Array.from(container.querySelectorAll<HTMLButtonElement>('.atlas-frame-strip button'))
+    act(() => {
+      atlasFrames[0].dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }))
+    })
+
+    const durationInput = getRequiredElement('.atlas-batch-metadata').querySelector<HTMLInputElement>('input')
+    if (!durationInput) {
+      throw new Error('Missing atlas batch duration input.')
+    }
+    setInputValue(durationInput, '417')
+    clickButtonWithin('.atlas-batch-metadata', 'Set Duration')
+
+    expect(container.textContent).toContain('Set duration to 417ms on 2 selected frames.')
+
+    const { capturedBlob } = setupDownloadCapture()
+    clickButton('Export Project JSON')
+    const exported = JSON.parse((await capturedBlob.current?.text()) ?? '{}') as {
+      animations: Array<{ id: string; frameIds: string[] }>
+      frames: Array<{ id: string; durationMs: number }>
+    }
+    const idleFrameIds = exported.animations.find((animation) => animation.id === 'idle')?.frameIds ?? []
+    const idleFrames = exported.frames.filter((frame) => idleFrameIds.includes(frame.id))
+
+    expect(idleFrames).toHaveLength(2)
+    expect(idleFrames.every((frame) => frame.durationMs === 417)).toBe(true)
+  })
+
+  it('sets tags and notes across selected atlas frames', async () => {
+    act(() => {
+      root.render(<App />)
+    })
+
+    clickButton('New Project')
+    clickButton('Add Frame')
+
+    const atlasFrames = Array.from(container.querySelectorAll<HTMLButtonElement>('.atlas-frame-strip button'))
+    act(() => {
+      atlasFrames[0].dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }))
+    })
+
+    const metadataPanel = getRequiredElement('.atlas-batch-metadata')
+    const inputs = metadataPanel.querySelectorAll<HTMLInputElement>('input')
+    const notesInput = metadataPanel.querySelector<HTMLTextAreaElement>('textarea')
+    if (!inputs[1] || !notesInput) {
+      throw new Error('Missing atlas batch tags or notes input.')
+    }
+
+    setInputValue(inputs[1], 'anticipation, contact')
+    clickButtonWithin('.atlas-batch-metadata', 'Set Tags')
+    setTextAreaValue(notesInput, 'Shared atlas timing note.')
+    clickButtonWithin('.atlas-batch-metadata', 'Set Notes')
+
+    expect(container.textContent).toContain('Set notes on 2 selected frames.')
+
+    const { capturedBlob } = setupDownloadCapture()
+    clickButton('Export Project JSON')
+    const exported = JSON.parse((await capturedBlob.current?.text()) ?? '{}') as {
+      animations: Array<{ id: string; frameIds: string[] }>
+      frames: Array<{ id: string; notes?: string; tags?: string[] }>
+    }
+    const idleFrameIds = exported.animations.find((animation) => animation.id === 'idle')?.frameIds ?? []
+    const idleFrames = exported.frames.filter((frame) => idleFrameIds.includes(frame.id))
+
+    expect(idleFrames).toHaveLength(2)
+    expect(idleFrames.every((frame) => frame.notes === 'Shared atlas timing note.')).toBe(true)
+    expect(idleFrames.every((frame) => frame.tags?.join(',') === 'anticipation,contact')).toBe(true)
+  })
+
+  it('refreshes local Ollama models from the main ask panel', async () => {
+    const fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        models: [
+          { name: 'llava:7b', details: { family: 'llama', families: ['llama', 'clip'], parameter_size: '7B' } },
+          { name: 'qwen3:14b', details: { family: 'qwen3', families: ['qwen3'], parameter_size: '14.8B' } },
+          { name: 'mistral-nemo:latest', details: { family: 'llama', families: ['llama'], parameter_size: '12.2B' } },
+          { name: 'llama3.2:3b', details: { family: 'llama', families: ['llama'], parameter_size: '3.2B' } },
+        ],
+      }),
+    } as Response)
+    vi.stubGlobal('fetch', fetch)
+
+    act(() => {
+      root.render(<App />)
+    })
+
+    clickButton('New Project')
+    setSelectValue(getRequiredElement('.atlas-request-panel select') as HTMLSelectElement, 'ollama')
+    await clickButtonAsync('Refresh Models')
+
+    const settingsInputs = getRequiredElement('.atlas-request-panel .ollama-settings').querySelectorAll('input')
+    const installedModelSelect = getRequiredElement('.atlas-request-panel .ollama-settings').querySelector(
+      'select',
+    ) as HTMLSelectElement | null
+
+    expect(settingsInputs[1].value).toBe('qwen3:14b')
+    expect(installedModelSelect?.options).toHaveLength(5)
+    expect(Array.from(installedModelSelect?.options ?? []).map((option) => option.value)).toEqual([
+      '',
+      'llava:7b',
+      'qwen3:14b',
+      'mistral-nemo:latest',
+      'llama3.2:3b',
+    ])
+    expect(container.textContent).toContain('Found 4 local Ollama models: llava:7b, qwen3:14b')
+    expect(fetch).toHaveBeenCalledWith('http://localhost:11434/api/tags')
+  })
+
+  it('warns when a vision-oriented Ollama model is selected for structured patches', () => {
+    act(() => {
+      root.render(<App />)
+    })
+
+    clickButton('New Project')
+    setSelectValue(getRequiredElement('.atlas-request-panel select') as HTMLSelectElement, 'ollama')
+    const settingsInputs = getRequiredElement('.atlas-request-panel .ollama-settings').querySelectorAll('input')
+    setInputValue(settingsInputs[1], 'llava:7b')
+
+    expect(container.textContent).toContain('Vision-oriented Ollama models often follow strict JSON poorly')
+  })
+
+  it('downloads an Ollama model from the main ask panel', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'success' }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ models: [{ name: 'phi4-mini' }] }),
+      } as Response)
+    vi.stubGlobal('fetch', fetch)
+
+    act(() => {
+      root.render(<App />)
+    })
+
+    clickButton('New Project')
+    setSelectValue(getRequiredElement('.atlas-request-panel select') as HTMLSelectElement, 'ollama')
+    const settingsInputs = getRequiredElement('.atlas-request-panel .ollama-settings').querySelectorAll('input')
+    setInputValue(settingsInputs[1], 'phi4-mini')
+
+    await clickButtonAsync('Download Model')
+
+    expect(container.textContent).toContain('Downloaded phi4-mini. Ready for structured patch requests.')
+    expect(fetch).toHaveBeenCalledWith(
+      'http://localhost:11434/api/pull',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ name: 'phi4-mini', stream: false }),
+      }),
+    )
+  })
+
+  it('asks Ollama from the main ask panel and shows a proposed patch message', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          response: '[{"op":"set","x":1,"y":2,"colorId":"ink"}]',
+        }),
+      } as Response),
+    )
+
+    act(() => {
+      root.render(<App />)
+    })
+
+    clickButton('New Project')
+    await clickButtonAsync('Ask Ollama')
+
+    expect(container.textContent).toContain('Ollama proposed 1 operation. Review before applying.')
+    expect(container.textContent).toContain('1/1 enabled')
+  })
+
+  it('asks Ollama for a broad character animation draft and creates editable frames', async () => {
+    const makeHeroPatch = (offsetX: number, capeOffset: number) => [
+      { op: 'set', x: 15 + offsetX, y: 12, colorId: 'ink' },
+      { op: 'set', x: 14 + offsetX, y: 13, colorId: 'ink' },
+      { op: 'set', x: 15 + offsetX, y: 13, colorId: 'light_gray' },
+      { op: 'set', x: 16 + offsetX, y: 13, colorId: 'ink' },
+      { op: 'set', x: 15 + offsetX, y: 14, colorId: 'charcoal' },
+      { op: 'set', x: 14 + offsetX, y: 15, colorId: 'charcoal' },
+      { op: 'set', x: 15 + offsetX, y: 15, colorId: 'accent' },
+      { op: 'set', x: 16 + offsetX, y: 15, colorId: 'charcoal' },
+      { op: 'set', x: 13 + offsetX - capeOffset, y: 15, colorId: 'shadow' },
+      { op: 'set', x: 13 + offsetX - capeOffset, y: 16, colorId: 'shadow' },
+      { op: 'set', x: 14 + offsetX, y: 16, colorId: 'charcoal' },
+      { op: 'set', x: 16 + offsetX, y: 16, colorId: 'charcoal' },
+      { op: 'set', x: 14 + offsetX, y: 17, colorId: 'ink' },
+      { op: 'set', x: 16 + offsetX, y: 17, colorId: 'ink' },
+    ]
+    const draft = {
+      animationName: 'Hero Idle',
+      fps: 4,
+      frames: [0, 1, 0, -1].map((offset, index) => ({
+        name: `Hero Idle ${index + 1}`,
+        durationMs: 250,
+        patch: makeHeroPatch(offset, index % 2),
+      })),
+    }
+    const fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ response: JSON.stringify(draft) }),
+    } as Response)
+    vi.stubGlobal('fetch', fetch)
+
+    act(() => {
+      root.render(<App />)
+    })
+
+    clickButton('New Project')
+    const requestInput = getRequiredElement('.atlas-request-panel textarea') as HTMLTextAreaElement
+    setTextAreaValue(requestInput, 'Hero wearing a cape. Standing animation')
+
+    await clickButtonAsync('Ask Ollama')
+
+    expect(container.textContent).toContain('Ollama drafted 4 editable frames for "Hero Idle".')
+    expect(fetch).toHaveBeenCalledWith(
+      'http://localhost:11434/api/generate',
+      expect.objectContaining({ method: 'POST' }),
+    )
+
+    const { capturedBlob } = setupDownloadCapture()
+    clickButton('Export Project JSON')
+    const exported = JSON.parse((await capturedBlob.current?.text()) ?? '{}') as {
+      animations: Array<{ id: string; name: string; frameIds: string[] }>
+      frames: Array<{ id: string; tags?: string[]; layers: Array<{ cells: Record<string, string> }> }>
+    }
+    const idle = exported.animations.find((animation) => animation.id === 'idle')
+    expect(idle).toMatchObject({ name: 'Hero Idle' })
+    expect(idle?.frameIds).toHaveLength(4)
+    const idleFrames = exported.frames.filter((frame) => idle?.frameIds.includes(frame.id))
+    expect(idleFrames).toHaveLength(4)
+    expect(idleFrames.every((frame) => Object.keys(frame.layers[0].cells).length >= 8)).toBe(true)
+    expect(idleFrames.every((frame) => frame.tags?.includes('ollama-draft'))).toBe(true)
+  })
+
+  it('pads plain animation prompts before asking Ollama for draft frames', async () => {
+    const makeCoinPatch = (frameIndex: number) => {
+      const left = frameIndex % 3 === 1 ? 15 : 14
+      const right = frameIndex % 3 === 1 ? 16 : 17
+      return [
+        { op: 'set', x: left, y: 14, colorId: 'ink' },
+        { op: 'set', x: left + 1, y: 14, colorId: 'accent' },
+        { op: 'set', x: right, y: 14, colorId: 'ink' },
+        { op: 'set', x: left, y: 15, colorId: 'accent' },
+        { op: 'set', x: left + 1, y: 15, colorId: 'white' },
+        { op: 'set', x: right, y: 15, colorId: 'accent' },
+        { op: 'set', x: left, y: 16, colorId: 'ink' },
+        { op: 'set', x: left + 1, y: 16, colorId: 'shadow' },
+        { op: 'set', x: right, y: 16, colorId: 'ink' },
+      ]
+    }
+    const draft = {
+      animationName: 'Coin Spin',
+      fps: 8,
+      frames: Array.from({ length: 6 }, (_, index) => ({
+        name: `Coin Spin ${index + 1}`,
+        durationMs: 125,
+        patch: makeCoinPatch(index),
+      })),
+    }
+    const fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ response: JSON.stringify(draft) }),
+    } as Response)
+    vi.stubGlobal('fetch', fetch)
+
+    act(() => {
+      root.render(<App />)
+    })
+
+    clickButton('New Project')
+    const requestInput = getRequiredElement('.atlas-request-panel textarea') as HTMLTextAreaElement
+    setTextAreaValue(requestInput, 'a 4-6 frame gold coin spinning animation')
+
+    await clickButtonAsync('Ask Ollama')
+
+    const requestBody = JSON.parse(fetch.mock.calls[0][1]?.body as string) as { prompt: string }
+    expect(requestBody.prompt).toContain('Return 6 frames.')
+    expect(requestBody.prompt).toContain('User request: a 4-6 frame gold coin spinning animation')
+    expect(requestBody.prompt).toContain('SpriteWrite interpretation: Draft a 6-frame editable animation row')
+    expect(requestBody.prompt).toContain('For spinning or rotating assets')
+    expect(container.textContent).toContain('Ollama drafted 6 editable frames for "Coin Spin".')
+
+    const { capturedBlob } = setupDownloadCapture()
+    clickButton('Export Project JSON')
+    const exported = JSON.parse((await capturedBlob.current?.text()) ?? '{}') as {
+      animations: Array<{ id: string; name: string; frameIds: string[] }>
+    }
+    const idle = exported.animations.find((animation) => animation.id === 'idle')
+    expect(idle).toMatchObject({ name: 'Coin Spin' })
+    expect(idle?.frameIds).toHaveLength(6)
+  })
+
+  it('hides invalid Ollama selected-frame patch overlays until validation passes', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          response: '[{"op":"set","x":1,"y":2,"colorId":"missing_color"}]',
+        }),
+      } as Response),
+    )
+
+    act(() => {
+      root.render(<App />)
+    })
+
+    clickButton('New Project')
+    await clickButtonAsync('Ask Ollama')
+
+    expect(container.textContent).toContain('validation found issues')
+    expect(container.textContent).toContain('Show provider details')
+    expect(container.querySelector('.provider-details pre')?.textContent).toContain('missing_color')
+    expect(container.querySelector('.provider-details pre')?.textContent).toContain('"validationErrors"')
+    expect(container.querySelectorAll('.pixel-cell.has-proposal')).toHaveLength(0)
+  })
+
+  it('shows provider details when Ollama animation drafts fail validation', async () => {
+    const draft = {
+      animationName: 'Broken Coin Spin',
+      fps: 8,
+      frames: Array.from({ length: 6 }, (_, index) => ({
+        name: `Broken Coin ${index + 1}`,
+        durationMs: 125,
+        patch: [{ op: 'set', x: 12 + index, y: 14, colorId: 'missing_color' }],
+      })),
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ response: JSON.stringify(draft) }),
+      } as Response),
+    )
+
+    act(() => {
+      root.render(<App />)
+    })
+
+    clickButton('New Project')
+    const requestInput = getRequiredElement('.atlas-request-panel textarea') as HTMLTextAreaElement
+    setTextAreaValue(requestInput, 'a 4-6 frame gold coin spinning animation')
+
+    await clickButtonAsync('Ask Ollama')
+
+    expect(container.textContent).toContain('Ollama animation draft rejected.')
+    expect(container.textContent).toContain('Show provider details')
+    const details = container.querySelector('.provider-details pre')?.textContent ?? ''
+    expect(details).toContain('"userInstruction": "a 4-6 frame gold coin spinning animation"')
+    expect(details).toContain('"validationErrors"')
+    expect(details).toContain('missing_color')
+    expect(details).toContain('"draft"')
+  })
+
+  it('reorders frames by dragging within an atlas row', async () => {
+    act(() => {
+      root.render(<App />)
+    })
+
+    clickButton('New Project')
+    clickButton('Add Frame')
+
+    const atlasFrames = Array.from(container.querySelectorAll<HTMLButtonElement>('.atlas-frame-strip button'))
+    expect(atlasFrames).toHaveLength(2)
+
+    dispatchDragEvent(atlasFrames[0], 'dragstart')
+    dispatchDragEvent(atlasFrames[1], 'drop')
+
+    expect(container.textContent).toContain('Frame order updated.')
+
+    const { capturedBlob } = setupDownloadCapture()
+    clickButton('Export Project JSON')
+    const exported = JSON.parse((await capturedBlob.current?.text()) ?? '{}') as {
+      animations: Array<{ id: string; frameIds: string[] }>
+    }
+    const idleFrameIds = exported.animations.find((animation) => animation.id === 'idle')?.frameIds ?? []
+
+    expect(idleFrameIds).toHaveLength(2)
+    expect(idleFrameIds[1]).toBe('idle-001')
   })
 
   it('returns home and reopens the current editable project', () => {
@@ -66,7 +601,7 @@ describe('App shell', () => {
     clickButton('Open Current Project')
 
     expect(container.textContent).toContain('Patch Assistant')
-    expect(container.textContent).toContain('Project JSON export is current.')
+    expect(container.textContent).toContain('Saved as Project JSON')
   })
 
   it('warns before page unload when editable work is unsaved', () => {
@@ -121,18 +656,61 @@ describe('App shell', () => {
     clickButton('Open Current Project')
 
     expect(container.textContent).toContain('64x64 cells')
-    expect(container.textContent).toContain('Browser draft autosaves locally.')
+    expect(container.textContent).toContain('Saved as Project JSON')
   })
 
-  it('opens the ooze demo with multiple frames', () => {
+  it('opens the hero sprite sheet demo with multiple animation rows', () => {
     act(() => {
       root.render(<App />)
     })
 
-    clickButton('Open Ooze Demo')
+    clickButton('Open Hero Demo')
 
-    expect(container.textContent).toContain('Ooze Sprite Starter')
-    expect(container.textContent).toContain('Frames: 2')
+    expect(container.textContent).toContain('Hero Sprite Demo')
+    expect(container.textContent).toContain('Frames: 4')
+    expect(container.textContent).toContain('Jump')
+    expect(container.textContent).toContain('Crouch')
+    expect(container.textContent).toContain('Sword Stab')
+  })
+
+  it('pads shorter animation rows in the full sprite sheet workspace', () => {
+    act(() => {
+      root.render(<App />)
+    })
+
+    clickButton('Open Hero Demo')
+    clickButton('Full Sheet')
+
+    expect(container.textContent).toContain('Full Sprite Sheet View')
+    expect(container.querySelectorAll('.sheet-row')).toHaveLength(4)
+    expect(container.querySelectorAll('.sheet-row-strip button')).toHaveLength(17)
+    expect(container.querySelectorAll('.sheet-frame-placeholder')).toHaveLength(3)
+  })
+
+  it('lets the preview use a solid background color without changing exports', () => {
+    act(() => {
+      root.render(<App />)
+    })
+
+    clickButton('New Project')
+
+    const previewBox = getRequiredElement('.preview-box') as HTMLDivElement
+    const backgroundToggle = Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'))
+      .find((input) => input.parentElement?.textContent?.includes('Solid preview background'))
+    const colorInput = container.querySelector<HTMLInputElement>('.preview-background-controls input[type="color"]')
+
+    if (!backgroundToggle || !colorInput) {
+      throw new Error('Missing preview background controls.')
+    }
+
+    act(() => {
+      backgroundToggle.click()
+    })
+    setInputValue(colorInput, '#334455')
+
+    expect(previewBox.classList.contains('solid-preview-background')).toBe(true)
+    expect(previewBox.getAttribute('style')).toContain('--preview-background-color: #334455')
+    expect(container.textContent).toContain('Export Plan')
   })
 
   it('switches paint and erase tools with keyboard shortcuts', () => {
@@ -237,17 +815,17 @@ describe('App shell', () => {
     clickButton('New Project')
     clickButton('Add Frame')
 
-    expect(getRequiredElement('.timeline button.active span').textContent).toBe('2')
+    expect(getRequiredElement('.atlas-frame-strip button.active span').textContent).toBe('2')
 
     act(() => {
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' }))
     })
-    expect(getRequiredElement('.timeline button.active span').textContent).toBe('1')
+    expect(getRequiredElement('.atlas-frame-strip button.active span').textContent).toBe('1')
 
     act(() => {
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
     })
-    expect(getRequiredElement('.timeline button.active span').textContent).toBe('2')
+    expect(getRequiredElement('.atlas-frame-strip button.active span').textContent).toBe('2')
   })
 
   it('opens and filters the command palette', () => {
@@ -269,7 +847,7 @@ describe('App shell', () => {
 
     setInputValue(commandSearch, 'metadata')
 
-    expect(container.textContent).toContain('Export Animation Metadata JSON')
+    expect(container.textContent).toContain('Export Full Sprite Sheet PNG + Metadata JSON')
     expect(container.textContent).not.toContain('Add layer')
   })
 
@@ -299,7 +877,7 @@ describe('App shell', () => {
     expect(container.textContent).not.toContain('Find editor actions')
   })
 
-  it('adds, duplicates, and deletes frames from the timeline controls', () => {
+  it('adds, duplicates, and deletes frames from the frame controls', () => {
     act(() => {
       root.render(<App />)
     })
@@ -444,6 +1022,25 @@ describe('App shell', () => {
     expect(Object.keys(undoneProject.frames[0].layers[0].cells)).toHaveLength(0)
   })
 
+  it('rejects a proposed patch without mutating the project', async () => {
+    act(() => {
+      root.render(<App />)
+    })
+
+    clickButton('New Project')
+    await clickButtonAsync('Generate Mock Patch')
+    expect(container.textContent).toContain('5/5 enabled')
+
+    clickButton('Reject Patch')
+
+    const afterReject = setupDownloadCapture()
+    clickButton('Export Project JSON')
+    const exportedProject = JSON.parse((await afterReject.capturedBlob.current?.text()) ?? '{}') as {
+      frames: Array<{ layers: Array<{ id: string; cells: Record<string, string> }> }>
+    }
+    expect(Object.keys(exportedProject.frames[0].layers[0].cells)).toHaveLength(0)
+    expect(container.textContent).toContain('Patch rejected.')
+  })
   it('undoes frame add operations from the editor', () => {
     act(() => {
       root.render(<App />)
@@ -887,7 +1484,7 @@ describe('App shell', () => {
       name: 'Imported Button',
       width: 64,
       height: 24,
-      assetType: 'button',
+      assetType: 'ui',
     })
 
     await importProjectFile(new File([JSON.stringify(project)], 'button.spritewrite.json', {
@@ -896,7 +1493,7 @@ describe('App shell', () => {
 
     expect(container.textContent).toContain('Imported Button')
     expect(container.textContent).toContain('64x24 cells')
-    expect(container.textContent).toContain('Project JSON export is current.')
+    expect(container.textContent).toContain('Saved as Project JSON')
   })
 
   it('rejects invalid project JSON without replacing the current project', async () => {
@@ -922,14 +1519,14 @@ describe('App shell', () => {
     })
 
     clickButton('New Project')
-    expect(container.textContent).toContain('Unsaved editable changes')
+    expect(container.textContent).toContain('Unsaved changes')
 
     const { anchor, capturedBlob } = setupDownloadCapture()
 
     clickButton('Export Project JSON')
 
     expect(anchor.download).toBe('untitled-sprite.spritewrite.json')
-    expect(container.textContent).toContain('Project JSON export is current.')
+    expect(container.textContent).toContain('Saved as Project JSON')
 
     const text = await capturedBlob.current?.text()
     expect(text).toContain('"name": "Untitled Sprite"')
@@ -956,26 +1553,34 @@ describe('App shell', () => {
       type: 'application/json',
     }))
 
-    expect(container.textContent).toContain('Project JSON export is current.')
+    expect(container.textContent).toContain('Saved as Project JSON')
     expect(getPixelCellByTitle('0,0 ink')).toBeTruthy()
   })
 
-  it('exports animation metadata JSON from the editor', async () => {
+  it('exports full sprite sheet PNG plus metadata JSON from the editor', async () => {
     act(() => {
       root.render(<App />)
     })
 
-    clickButton('New Project')
-    const { anchor, capturedBlob } = setupDownloadCapture()
+    clickButton('Open Hero Demo')
+    const { anchor, canvas, capturedBlob } = setupPngDownloadCapture()
 
-    clickButton('Export Metadata JSON')
+    await clickButtonAsync('Export Full Sprite Sheet PNG + Metadata JSON')
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
 
-    expect(anchor.download).toBe('idle-metadata@1x.json')
+    expect(canvas.width).toBe(160)
+    expect(canvas.height).toBe(128)
+    expect(anchor.download).toBe('hero-sprite-demo-sprite-sheet@1x.metadata.json')
     const text = await capturedBlob.current?.text()
     expect(text).toContain('"formatName": "SpriteWrite"')
-    expect(text).toContain('"frameCount": 1')
-    expect(text).toContain('"sheetWidth": 32')
-    expect(text).toContain('"layers"')
+    expect(text).toContain('"imageFilename": "hero-sprite-demo-sprite-sheet@1x.png"')
+    expect(text).toContain('"rowCount": 4')
+    expect(text).toContain('"columnCount": 5')
+    expect(text).toContain('"animationName": "Sword Stab"')
+    expect(text).toContain('"frameId": "sword-stab-005"')
   })
 
   it('exports current frame PNG from the editor through a crisp canvas path', async () => {
@@ -986,7 +1591,7 @@ describe('App shell', () => {
     clickButton('New Project')
     const { anchor, canvas, context, capturedBlob } = setupPngDownloadCapture()
 
-    await clickButtonAsync('Export Frame PNG')
+    await clickButtonAsync('Export Current Frame PNG')
 
     expect(anchor.download).toBe('idle-001@1x.png')
     expect(canvas.width).toBe(32)
@@ -996,7 +1601,7 @@ describe('App shell', () => {
     expect(capturedBlob.current?.type).toBe('image/png')
   })
 
-  it('exports animation spritesheet PNG from the editor through a crisp canvas path', async () => {
+  it('exports current animation strip PNG from the editor through a crisp canvas path', async () => {
     act(() => {
       root.render(<App />)
     })
@@ -1004,11 +1609,29 @@ describe('App shell', () => {
     clickButton('New Project')
     const { anchor, canvas, context, capturedBlob } = setupPngDownloadCapture()
 
-    await clickButtonAsync('Export Spritesheet PNG')
+    await clickButtonAsync('Export Current Animation Strip PNG')
 
-    expect(anchor.download).toBe('idle-spritesheet@1x.png')
+    expect(anchor.download).toBe('idle-animation-strip@1x.png')
     expect(canvas.width).toBe(32)
     expect(canvas.height).toBe(32)
+    expect(context.imageSmoothingEnabled).toBe(false)
+    expect(context.putImageData).toHaveBeenCalled()
+    expect(capturedBlob.current?.type).toBe('image/png')
+  })
+
+  it('exports full sprite sheet PNG from the editor through a crisp canvas path', async () => {
+    act(() => {
+      root.render(<App />)
+    })
+
+    clickButton('Open Hero Demo')
+    const { anchor, canvas, context, capturedBlob } = setupPngDownloadCapture()
+
+    await clickButtonAsync('Export Full Sprite Sheet PNG')
+
+    expect(anchor.download).toBe('hero-sprite-demo-sprite-sheet@1x.png')
+    expect(canvas.width).toBe(160)
+    expect(canvas.height).toBe(128)
     expect(context.imageSmoothingEnabled).toBe(false)
     expect(context.putImageData).toHaveBeenCalled()
     expect(capturedBlob.current?.type).toBe('image/png')
@@ -1039,6 +1662,117 @@ describe('App shell', () => {
     expect(container.querySelectorAll('.mini-highlight')).toHaveLength(8)
   })
 
+  it('can remove a proposed patch operation before apply', async () => {
+    act(() => {
+      root.render(<App />)
+    })
+
+    clickButton('New Project')
+    await clickButtonAsync('Generate Mock Patch')
+
+    clickButton('Remove')
+
+    expect(container.textContent).toContain('4/4 enabled')
+    expect(container.textContent).toContain('Cells 4')
+    expect(container.querySelectorAll('.mini-highlight')).toHaveLength(8)
+
+    clickButton('Apply Patch')
+
+    const afterApply = setupDownloadCapture()
+    clickButton('Export Project JSON')
+    const exportedProject = JSON.parse((await afterApply.capturedBlob.current?.text()) ?? '{}') as {
+      frames: Array<{ layers: Array<{ id: string; cells: Record<string, string> }> }>
+    }
+    expect(Object.keys(exportedProject.frames[0].layers[0].cells)).toHaveLength(4)
+  })
+
+  it('does not apply a patch when every proposed operation is excluded', async () => {
+    act(() => {
+      root.render(<App />)
+    })
+
+    clickButton('New Project')
+    await clickButtonAsync('Generate Mock Patch')
+
+    for (let index = 0; index < 5; index += 1) {
+      clickButton('Exclude')
+    }
+
+    expect(container.textContent).toContain('0/5 enabled')
+    const applyButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Apply Patch',
+    )
+    expect(applyButton?.disabled).toBe(true)
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))
+    })
+    const commandSearch = container.querySelector<HTMLInputElement>('.command-palette input')
+    if (!commandSearch) {
+      throw new Error('Missing command palette search input.')
+    }
+
+    setInputValue(commandSearch, 'apply proposed patch')
+    const commandButton = Array.from(container.querySelectorAll<HTMLButtonElement>('.command-item')).find(
+      (button) => button.textContent?.includes('Apply proposed patch'),
+    )
+    expect(commandButton?.disabled).toBe(true)
+
+    act(() => {
+      commandSearch.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    })
+
+    const afterAttempt = setupDownloadCapture()
+    clickButton('Export Project JSON')
+    const exportedProject = JSON.parse((await afterAttempt.capturedBlob.current?.text()) ?? '{}') as {
+      frames: Array<{ layers: Array<{ id: string; cells: Record<string, string> }> }>
+    }
+    expect(Object.keys(exportedProject.frames[0].layers[0].cells)).toHaveLength(0)
+  })
+  it('clears stale proposed patches after a provider failure', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 503,
+        statusText: 'Unavailable',
+      } as Response),
+    )
+
+    act(() => {
+      root.render(<App />)
+    })
+
+    clickButton('New Project')
+    await clickButtonAsync('Generate Mock Patch')
+    expect(container.textContent).toContain('5/5 enabled')
+
+    const providerSelect = Array.from(container.querySelectorAll('select')).find((select) =>
+      Array.from(select.options).some((option) => option.value === 'ollama'),
+    )
+    if (!providerSelect) {
+      throw new Error('Missing provider selector.')
+    }
+
+    act(() => {
+      providerSelect.value = 'ollama'
+      providerSelect.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+
+    await clickButtonAsync('Generate With Ollama')
+
+    expect(container.textContent).toContain('Ollama returned 503 Unavailable')
+    expect(container.textContent).not.toContain('5/5 enabled')
+
+    clickButton('Apply Patch')
+
+    const afterFailure = setupDownloadCapture()
+    clickButton('Export Project JSON')
+    const exportedProject = JSON.parse((await afterFailure.capturedBlob.current?.text()) ?? '{}') as {
+      frames: Array<{ layers: Array<{ id: string; cells: Record<string, string> }> }>
+    }
+    expect(Object.keys(exportedProject.frames[0].layers[0].cells)).toHaveLength(0)
+  })
   function setInputValue(input: HTMLInputElement, value: string) {
     act(() => {
       const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
@@ -1137,6 +1871,22 @@ describe('App shell', () => {
     act(() => {
       cell.dispatchEvent(new Event('pointerdown', { bubbles: true, cancelable: true }))
       window.dispatchEvent(new Event('pointerup', { bubbles: true }))
+    })
+  }
+
+  function dispatchDragEvent(element: HTMLElement, type: 'dragstart' | 'drop' | 'dragend') {
+    const event = new Event(type, { bubbles: true, cancelable: true })
+    Object.defineProperty(event, 'dataTransfer', {
+      value: {
+        effectAllowed: '',
+        dropEffect: '',
+        setData: vi.fn(),
+        getData: vi.fn(),
+      },
+    })
+
+    act(() => {
+      element.dispatchEvent(event)
     })
   }
 
@@ -1240,7 +1990,12 @@ describe('App shell', () => {
 
     Object.defineProperty(URL, 'createObjectURL', {
       configurable: true,
-      value: vi.fn(() => 'blob:frame-png'),
+      value: vi.fn((blob: Blob | MediaSource) => {
+        if (blob instanceof Blob) {
+          capturedBlob.current = blob
+        }
+        return 'blob:frame-png'
+      }),
     })
     Object.defineProperty(URL, 'revokeObjectURL', {
       configurable: true,
