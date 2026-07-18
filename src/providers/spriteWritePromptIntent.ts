@@ -1,6 +1,13 @@
 import type { SpriteProject } from '../domain/spriteTypes'
 
 export type SpriteWritePromptMode = 'frame-patch' | 'frame-draft' | 'animation-draft'
+export type SpriteWriteAssetOutputContext = 'auto' | 'static' | 'animated'
+export type SpriteWriteViewAngleContext = 'auto' | 'side-scroller' | 'top-down' | 'three-quarter'
+
+export interface SpriteWritePromptContextOptions {
+  output?: SpriteWriteAssetOutputContext
+  viewAngle?: SpriteWriteViewAngleContext
+}
 
 export interface SpriteWritePromptIntent {
   mode: SpriteWritePromptMode
@@ -14,18 +21,21 @@ export interface SpriteWritePromptIntent {
 export function createSpriteWritePromptIntent(
   instruction: string,
   project: SpriteProject,
+  context: SpriteWritePromptContextOptions = {},
 ): SpriteWritePromptIntent {
   const userInstruction = instruction.trim() || 'Create a readable pixel asset.'
-  const mode = inferPromptMode(userInstruction)
+  const mode = inferPromptMode(userInstruction, context)
   const frameCount = mode === 'animation-draft' ? inferRequestedFrameCount(userInstruction) : 1
   const variationCount = mode === 'animation-draft' ? inferRequestedVariationCount(userInstruction) : 1
   const paletteIds = project.palette.map((color) => color.id).join(', ')
+  const contextLines = createPromptContextLines(context)
 
   if (mode === 'animation-draft') {
     const paddedInstruction = [
       `User request: ${userInstruction}`,
       `SpriteWrite interpretation: Draft a ${frameCount}-frame editable animation row from this request.`,
       `Canvas/frame size: ${project.canvas.width}x${project.canvas.height} cells.`,
+      ...contextLines,
       `Use only these palette IDs: ${paletteIds}.`,
       'Create full readable frame patches, not a tiny partial edit.',
       'Keep the asset centered unless the user explicitly asks otherwise.',
@@ -59,6 +69,7 @@ export function createSpriteWritePromptIntent(
         `User request: ${userInstruction}`,
         'SpriteWrite interpretation: Draft one full readable editable frame on the selected frame and layer.',
         `Canvas/frame size: ${project.canvas.width}x${project.canvas.height} cells.`,
+        ...contextLines,
         `Use only these palette IDs: ${paletteIds}.`,
         'Create a complete readable asset, not a tiny partial edit.',
         'Keep the asset centered unless the user explicitly asks otherwise.',
@@ -79,6 +90,7 @@ export function createSpriteWritePromptIntent(
       `User request: ${userInstruction}`,
       'SpriteWrite interpretation: Propose a focused selected-frame edit.',
       `Canvas/frame size: ${project.canvas.width}x${project.canvas.height} cells.`,
+      ...contextLines,
       `Use only these palette IDs: ${paletteIds}.`,
       'Edit only the selected frame and selected layer.',
       'Keep the patch small, coherent, and readable.',
@@ -93,7 +105,10 @@ export function looksLikeAnimationOrWholeAssetRequest(instruction: string): bool
   return inferPromptMode(instruction) === 'animation-draft'
 }
 
-export function inferPromptMode(instruction: string): SpriteWritePromptMode {
+export function inferPromptMode(
+  instruction: string,
+  context: SpriteWritePromptContextOptions = {},
+): SpriteWritePromptMode {
   const normalized = instruction.toLowerCase()
   const asksForFrameSequence = /\b\d+\s*(?:-|to)?\s*\d*\s*frames?\b/.test(normalized)
   const asksForVariations = /\b\d+\s*(?:frame\s*set\s*)?variations?\b/.test(normalized)
@@ -150,6 +165,20 @@ export function inferPromptMode(instruction: string): SpriteWritePromptMode {
     return 'frame-patch'
   }
 
+  if (context.output === 'animated' && !asksForSingleFrame) {
+    return 'animation-draft'
+  }
+
+  if (
+    context.output === 'static' &&
+    !asksForFrameSequence &&
+    !asksForVariations &&
+    !normalized.includes('animation') &&
+    !normalized.includes('animated')
+  ) {
+    return 'frame-draft'
+  }
+
   if ((asksForFrameSequence || asksForVariations || asksForAnimation) && !asksForSingleFrame) {
     return 'animation-draft'
   }
@@ -195,4 +224,24 @@ function clampFrameCount(value: number): number {
   }
 
   return Math.max(3, Math.min(6, Math.round(value)))
+}
+
+function createPromptContextLines(context: SpriteWritePromptContextOptions): string[] {
+  const lines: string[] = []
+
+  if (context.output === 'static') {
+    lines.push('Output intent: static asset or tile; make one complete readable frame unless the user explicitly asks for multiple frames.')
+  } else if (context.output === 'animated') {
+    lines.push('Output intent: animated sprite or frame row; preserve identity, scale, palette, and motion continuity across frames.')
+  }
+
+  if (context.viewAngle === 'side-scroller') {
+    lines.push('View context: side-scroller side view; emphasize a clear side silhouette, bottom ground contact, and lateral readability.')
+  } else if (context.viewAngle === 'top-down') {
+    lines.push('View context: top-down view; emphasize footprint, north/east/south/west edge continuity for tileable assets, and minimal side-facing profile.')
+  } else if (context.viewAngle === 'three-quarter') {
+    lines.push('View context: 2.5D/three-quarter view; show readable top and front/side planes with consistent depth cues inside the fixed grid.')
+  }
+
+  return lines
 }

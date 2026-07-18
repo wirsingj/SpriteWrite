@@ -64,7 +64,9 @@ import {
 } from './providers/ollamaPatchProvider'
 import {
   createSpriteWritePromptIntent,
+  type SpriteWriteAssetOutputContext,
   type SpriteWritePromptIntent,
+  type SpriteWriteViewAngleContext,
 } from './providers/spriteWritePromptIntent'
 import {
   exportFramePng,
@@ -463,6 +465,8 @@ function App() {
   const [useSolidPreviewBackground, setUseSolidPreviewBackground] = useState(false)
   const [previewBackgroundColor, setPreviewBackgroundColor] = useState(DEFAULT_PREVIEW_BACKGROUND)
   const [providerChoice, setProviderChoice] = useState<ProviderChoice>('ollama')
+  const [assetOutputContext, setAssetOutputContext] = useState<SpriteWriteAssetOutputContext>('auto')
+  const [viewAngleContext, setViewAngleContext] = useState<SpriteWriteViewAngleContext>('auto')
   const [instruction, setInstruction] = useState(() => getDefaultPatchInstruction(project))
   const [proposedPatch, setProposedPatch] = useState<PixelPatchOperation[]>([])
   const [disabledPatchOperationIndexes, setDisabledPatchOperationIndexes] = useState<Set<number>>(
@@ -490,8 +494,12 @@ function App() {
   const [newProjectAssetType, setNewProjectAssetType] = useState<SpriteAssetType>('custom')
   const ollamaModelSuitabilityNote = getOllamaModelSuitabilityNote(ollamaModel)
   const spriteWritePromptIntent = useMemo(
-    () => createSpriteWritePromptIntent(instruction, project),
-    [instruction, project],
+    () =>
+      createSpriteWritePromptIntent(instruction, project, {
+        output: assetOutputContext,
+        viewAngle: viewAngleContext,
+      }),
+    [assetOutputContext, instruction, project, viewAngleContext],
   )
   const selectedInstalledOllamaModel = ollamaModels.some((model) => model.name === ollamaModel)
     ? ollamaModel
@@ -2698,6 +2706,31 @@ function App() {
                 <option value="mock">Mock local</option>
               </select>
             </label>
+            <div className="form-grid">
+              <label>
+                Output
+                <select
+                  value={assetOutputContext}
+                  onChange={(event) => setAssetOutputContext(event.target.value as SpriteWriteAssetOutputContext)}
+                >
+                  <option value="auto">Auto</option>
+                  <option value="static">Static frame / tile</option>
+                  <option value="animated">Animated row</option>
+                </select>
+              </label>
+              <label>
+                View
+                <select
+                  value={viewAngleContext}
+                  onChange={(event) => setViewAngleContext(event.target.value as SpriteWriteViewAngleContext)}
+                >
+                  <option value="auto">Auto</option>
+                  <option value="side-scroller">Side-scroller</option>
+                  <option value="top-down">Top-down</option>
+                  <option value="three-quarter">2.5D / three-quarter</option>
+                </select>
+              </label>
+            </div>
             {providerChoice === 'ollama' ? (
               <div className="ollama-settings">
                 <label>
@@ -3422,6 +3455,10 @@ function App() {
               setProviderChoice={setProviderChoice}
               instruction={instruction}
               setInstruction={setInstruction}
+              assetOutputContext={assetOutputContext}
+              setAssetOutputContext={setAssetOutputContext}
+              viewAngleContext={viewAngleContext}
+              setViewAngleContext={setViewAngleContext}
               proposedPatch={proposedPatch}
               activeProposedPatch={activeProposedPatch}
               disabledOperationIndexes={disabledPatchOperationIndexes}
@@ -4099,6 +4136,10 @@ function PatchAssistant({
   setProviderChoice,
   instruction,
   setInstruction,
+  assetOutputContext,
+  setAssetOutputContext,
+  viewAngleContext,
+  setViewAngleContext,
   proposedPatch,
   activeProposedPatch,
   disabledOperationIndexes,
@@ -4125,6 +4166,10 @@ function PatchAssistant({
   setProviderChoice: (provider: ProviderChoice) => void
   instruction: string
   setInstruction: (instruction: string) => void
+  assetOutputContext: SpriteWriteAssetOutputContext
+  setAssetOutputContext: (context: SpriteWriteAssetOutputContext) => void
+  viewAngleContext: SpriteWriteViewAngleContext
+  setViewAngleContext: (context: SpriteWriteViewAngleContext) => void
   proposedPatch: PixelPatchOperation[]
   activeProposedPatch: PixelPatchOperation[]
   disabledOperationIndexes: Set<number>
@@ -4164,6 +4209,31 @@ function PatchAssistant({
         Instruction
         <textarea value={instruction} onChange={(event) => setInstruction(event.target.value)} />
       </label>
+      <div className="form-grid">
+        <label>
+          Output
+          <select
+            value={assetOutputContext}
+            onChange={(event) => setAssetOutputContext(event.target.value as SpriteWriteAssetOutputContext)}
+          >
+            <option value="auto">Auto</option>
+            <option value="static">Static frame / tile</option>
+            <option value="animated">Animated row</option>
+          </select>
+        </label>
+        <label>
+          View
+          <select
+            value={viewAngleContext}
+            onChange={(event) => setViewAngleContext(event.target.value as SpriteWriteViewAngleContext)}
+          >
+            <option value="auto">Auto</option>
+            <option value="side-scroller">Side-scroller</option>
+            <option value="top-down">Top-down</option>
+            <option value="three-quarter">2.5D / three-quarter</option>
+          </select>
+        </label>
+      </div>
 
       {providerChoice === 'ollama' ? (
         <div className="ollama-settings">

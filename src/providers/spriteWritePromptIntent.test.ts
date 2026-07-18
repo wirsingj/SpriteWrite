@@ -48,6 +48,30 @@ describe('SpriteWrite prompt intent', () => {
     expect(intent.paddedInstruction).toContain('Create a complete readable asset, not a tiny partial edit')
   })
 
+  it('adds static asset and view-angle context to padded prompts', () => {
+    const intent = createSpriteWritePromptIntent('ground tileable set', project, {
+      output: 'static',
+      viewAngle: 'top-down',
+    })
+
+    expect(intent.mode).toBe('frame-draft')
+    expect(intent.paddedInstruction).toContain('Output intent: static asset or tile')
+    expect(intent.paddedInstruction).toContain('View context: top-down view')
+    expect(intent.paddedInstruction).toContain('north/east/south/west edge continuity')
+  })
+
+  it('can use UI-provided context to frame terse prompts as animation drafts', () => {
+    const intent = createSpriteWritePromptIntent('hero with cape', project, {
+      output: 'animated',
+      viewAngle: 'side-scroller',
+    })
+
+    expect(intent.mode).toBe('animation-draft')
+    expect(intent.summary).toContain('editable animation draft')
+    expect(intent.paddedInstruction).toContain('Output intent: animated sprite or frame row')
+    expect(intent.paddedInstruction).toContain('View context: side-scroller side view')
+  })
+
   it('infers requested frame counts from exact counts and ranges', () => {
     expect(inferRequestedFrameCount('make a 4 frame idle animation')).toBe(4)
     expect(inferRequestedFrameCount('make a 4-6 frame spinning animation')).toBe(6)

@@ -74,10 +74,10 @@ The UI should present this flow as AI Assist, edits, and drafts. "Patch" remains
 Prompt intent padding:
 
 ```text
-plain user request -> SpriteWrite prompt intent -> selected-frame patch, single-frame draft, animation draft, or animation-set provider rail
+plain user request + output/view context -> SpriteWrite prompt intent -> selected-frame edit, single-frame draft, animation draft, or animation-set provider rail
 ```
 
-SpriteWrite, not the user, is responsible for padding natural requests into constrained provider instructions with canvas dimensions, palette IDs, frame-count expectations, and output-shape rules.
+SpriteWrite, not the user, is responsible for padding natural requests into constrained provider instructions with canvas dimensions, palette IDs, frame-count expectations, output-shape rules, and optional view assumptions. Current UI-owned prompt context can bias a request toward a static frame/tile, animated row, side-scroller side view, top-down view, or 2.5D/three-quarter view. This is prompt state, not a permanent project or export constraint.
 
 Broad animation draft:
 

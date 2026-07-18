@@ -86,6 +86,8 @@ Prefer structured, reviewable results: editable pixel grids, palette changes, fr
 
 AI output must never become an irreversible replacement. The user must be able to preview, accept, reject, undo, and manually edit every result.
 
+AI prompting should carry explicit asset context so the user does not have to stuff every constraint into prose. SpriteWrite should help frame requests as static assets, animated rows, tileable terrain/walls/floors, props, icons, effects, or backgrounds. It should also expose view context when relevant, such as side-scroller side view, top-down view, or 2.5D/three-quarter view, because those constraints change silhouettes, tile edges, lighting, anchors, and readability.
+
 ## Asset Recipes
 
 The project model should remain engine-neutral. Asset recipes or templates may provide defaults, but all defaults must stay editable.

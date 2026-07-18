@@ -52,6 +52,7 @@ Verified from repository docs and source inspection on 2026-07-01:
 - The visible AI provider defaults to Ollama local. In the real browser app, SpriteWrite performs one startup model refresh automatically so users do not need to manually switch providers and refresh models before trying local Ollama. Vitest skips this browser-startup network work.
 - Ollama model refresh uses a real installed-model selector, preserves manual model-name entry for downloads/custom names, derives vision suitability from Ollama `details.families` when top-level capabilities are absent, and reports discovered model names in status text.
 - SpriteWrite now pads plain asset prompts before they reach Ollama: small edits route to selected-frame edits, static asset requests route to larger single-frame drafts, and multi-frame/animation requests route to 3-6 frame animation drafts.
+- AI Assist now includes prompt context controls for output intent (`Auto`, `Static frame / tile`, `Animated row`) and view angle (`Auto`, `Side-scroller`, `Top-down`, `2.5D / three-quarter`). These context values are injected into SpriteWrite's padded Ollama instructions so static tile/wall/ground/background-style requests can carry game-view assumptions without the user hand-writing prompt boilerplate.
 - Ollama broad animation prompts route to a first-pass structured animation-draft path: editable frame patches are requested, validated, checked for basic coherence, and committed only if valid.
 - Ollama broad asset prompts now have a recipe rail for observed qwen-stable cases. Prompts such as rotating gold coin, short grass tile variations, hero idle/cape, and tentacle monster variations can ask Ollama for compact recipe parameters; SpriteWrite deterministically expands those parameters into editable cell patches and animation rows.
 - Live local `qwen3:14b` probes on 2026-07-18 showed compact recipe prompts returning usable JSON quickly for 4-frame rotating gold coin, 4 grass tile variations, hero idle/cape, and 3 tentacle creature variations. Raw all-cell prompts remain more fragile and slower.
@@ -76,7 +77,7 @@ Known project commands from `package.json`:
 - `npm run lint`
 - `npm run typecheck`
 
-Latest verified run on 2026-07-18: `npm run build`, `npm test -- --run`, `npm run lint`, and `npm run typecheck` passed after defaulting the visible provider to Ollama local, adding startup model refresh, removing the old shortcut settings panel, and updating user-facing assistant language. The full test suite includes live local `qwen3:14b` integration checks when available. The test suite has 9 test files and 212 tests.
+Latest verified run on 2026-07-18: `npm run build`, `npm test -- --run`, `npm run lint`, and `npm run typecheck` passed after adding AI Assist output/view prompt context controls. The full test suite includes live local `qwen3:14b` integration checks when available. The test suite has 9 test files and 215 tests.
 
 ## Current Risks And Uncertainty
 
@@ -102,10 +103,11 @@ Use `docs/STATE_OF_SPRITEWRITE.md` as the detailed active roadmap. Current next-
 
 1. Continue polishing the canvas-first creative workflow: improve icon/tool affordances, refine timeline controls, and keep AI/export from crowding normal drawing.
 2. Shape AI assistance around focused asset operations: improve prompt-intent padding, first-frame draft, derived frame, in-between, pose change with identity/palette preservation, follow-through, variants, silhouette cleanup, palette suggestions, animation structure, selected-cell/layer patches, and continuity evaluation.
-3. Make recipe-based Ollama drafts more inspectable in the UI before acceptance; current recipe expansion commits accepted animation drafts through validation, but recipe choice, retry strategy, partial row acceptance, and recipe/debug visibility need product design.
-4. Real browser/export download checks or PNG binary smoke tests.
-5. Layer improvements such as folders.
-6. Revisit keyboard shortcut customization only if the workflow clearly needs it; the previous bottom-left shortcut settings panel was removed because it added clutter without helping sprite creation.
+3. Expand static asset and tile/wall/floor/background generation beyond one-frame prompt context: multiple static variants, tile-set rows, edge/corner/interior tiles, and view-aware recipe rails need product design and validation.
+4. Make recipe-based Ollama drafts more inspectable in the UI before acceptance; current recipe expansion commits accepted animation drafts through validation, but recipe choice, retry strategy, partial row acceptance, and recipe/debug visibility need product design.
+5. Real browser/export download checks or PNG binary smoke tests.
+6. Layer improvements such as folders.
+7. Revisit keyboard shortcut customization only if the workflow clearly needs it; the previous bottom-left shortcut settings panel was removed because it added clutter without helping sprite creation.
 
 ## Open Questions
 

@@ -58,6 +58,7 @@ SpriteWrite should support multiple pixel-art resolutions and visual styles. Avo
 - Draggable bottom atlas height and right preview/inspector width handles for fitting the workspace to the current asset.
 - Center workspace toggle for detailed frame editing or full sprite sheet view; clicking a frame in the full-sheet view returns to editing.
 - Focused AI Assist surface for Ollama/Mock structured edit proposals against editable grid data, with startup local Ollama model refresh plus manual refresh/download controls.
+- AI Assist output/view context controls for static frame or tile prompts, animated rows, side-scroller side view, top-down view, and 2.5D/three-quarter view.
 - First-pass Ollama animation-draft flow for broad prompts such as "hero wearing a cape, standing animation"; successful drafts become editable frame rows rather than opaque images.
 - Animation preview with adjustable FPS, optional solid preview background color, and crisp nearest-neighbor rendering.
 - Basic previous-frame onion skin.
@@ -100,12 +101,13 @@ SpriteWrite should support multiple pixel-art resolutions and visual styles. Avo
 15. Use onion skin to compare against the previous frame.
 16. Preview the current frame or animation.
 17. Use the default Ollama local provider, optionally refresh/download a local model, or switch to the Mock local provider.
-18. Use small edit prompts for selected-frame edits, or broad character/animation prompts for a structured frame-row draft.
-19. Inspect valid proposed edit JSON and grid overlay.
-20. Exclude or remove unwanted selected-frame edit operations if needed.
-21. Apply or reject the edit or draft.
-22. Undo or redo as needed.
-23. Export project JSON, PNG frames, animation strips, full sprite sheets, or full sprite sheet metadata.
+18. Set AI Assist output/view context when useful: static frame or tile, animated row, side-scroller, top-down, or 2.5D/three-quarter.
+19. Use small edit prompts for selected-frame edits, broad static prompts for single-frame assets, or broad character/animation prompts for a structured frame-row draft.
+20. Inspect valid proposed edit JSON and grid overlay.
+21. Exclude or remove unwanted selected-frame edit operations if needed.
+22. Apply or reject the edit or draft.
+23. Undo or redo as needed.
+24. Export project JSON, PNG frames, animation strips, full sprite sheets, or full sprite sheet metadata.
 
 The non-negotiable rule: project data is canon. Canvas rendering and PNG export are derived from project data.
 
@@ -231,6 +233,8 @@ The AI Assistant is the first AI-shaped workflow, but it does not require AI.
 - `Ollama local` is the default provider. SpriteWrite auto-refreshes local models on browser startup when Ollama is reachable.
 - `Mock local` returns deterministic local cell operations when you want a no-provider test path.
 - `Ollama experimental` can call a local Ollama server and expects JSON cell operations only.
+- Output context lets SpriteWrite frame the request as auto, static frame/tile, or animated row.
+- View context lets SpriteWrite add side-scroller, top-down, or 2.5D/three-quarter guidance before the prompt reaches Ollama.
 - Broad character/animation prompts can request a 3-6 frame draft object containing per-frame patch arrays.
 - Proposed selected-frame edits are shown as JSON and previewed on the grid only when valid.
 - Edits and drafts never apply automatically.

@@ -27,19 +27,21 @@ No feature should bypass the `SpriteProject` model. No feature should make the c
 13. Use onion skin for animation continuity.
 14. Preview the current frame or animation.
 15. Use the default Ollama local provider, optionally refresh/download a local model, or switch to Mock local.
-16. For broad prompts such as "hero wearing a cape, standing animation," expect 3-6 editable frame drafts in the selected animation row.
-17. Validate edit or draft output.
-18. Preview proposed selected-frame edits before applying them.
-19. Exclude, include, or remove unwanted selected-frame edit operations if needed.
-20. Apply or reject edit/draft output.
-21. Undo or redo as needed.
-22. Add, select, reorder, hide, apply layer presets, change blend mode, exclude from export, or delete layers as needed.
-23. Export project JSON.
-24. Export current frame PNG, current animation strip PNG, full sprite sheet PNG, or full sprite sheet PNG plus metadata JSON.
+16. Set output/view context when useful: static frame or tile, animated row, side-scroller, top-down, or 2.5D/three-quarter.
+17. For static prompts such as "ground tileable set" or "stone wall piece," expect a complete editable frame.
+18. For broad animation prompts such as "hero wearing a cape, standing animation," expect 3-6 editable frame drafts in the selected animation row.
+19. Validate edit or draft output.
+20. Preview proposed selected-frame edits before applying them.
+21. Exclude, include, or remove unwanted selected-frame edit operations if needed.
+22. Apply or reject edit/draft output.
+23. Undo or redo as needed.
+24. Add, select, reorder, hide, apply layer presets, change blend mode, exclude from export, or delete layers as needed.
+25. Export project JSON.
+26. Export current frame PNG, current animation strip PNG, full sprite sheet PNG, or full sprite sheet PNG plus metadata JSON.
 
 ## Current MVP Flow
 
-The app currently starts on a home screen. The user can create blank 32x32, blank 64x64, icon 32x32, UI button 64x24, hero 32x32 sprite sheet demo, or ooze 32x32 reference projects. Blank/icon/UI button projects use a neutral palette; the hero demo uses a small character palette; the ooze palette is limited to the ooze reference. The quick demo button opens the hero sprite sheet demo: Idle, Jump, Crouch, and Sword Stab rows with 17 total frames. The editor now uses a canvas-first creative-tool layout: compact app header, left tool/palette/layer dock, large center workspace, bottom atlas/filmstrip, and right preview/context inspector. The primary path is clear: draw on the canvas, inspect sheet rows in the filmstrip, click a row/frame, multi-select, duplicate/delete selected row frames, set selected-frame duration/notes/tags, drag-reorder row frames when needed, switch between frame editing and full sprite sheet view, preview, export. AI Assist is available as a focused collapsed surface that defaults to Ollama local, auto-refreshes local Ollama models on browser startup, can pull/download a named model, asks Ollama for selected-frame edit JSON, or routes broad whole-asset prompts to a structured animation draft made of frame operation arrays. The editor can switch animations, add a new blank animation with matching layer structure, duplicate animations, rename animations, reorder animations, and delete non-final animations.
+The app currently starts on a home screen. The user can create blank 32x32, blank 64x64, icon 32x32, UI button 64x24, hero 32x32 sprite sheet demo, or ooze 32x32 reference projects. Blank/icon/UI button projects use a neutral palette; the hero demo uses a small character palette; the ooze palette is limited to the ooze reference. The quick demo button opens the hero sprite sheet demo: Idle, Jump, Crouch, and Sword Stab rows with 17 total frames. The editor now uses a canvas-first creative-tool layout: compact app header, left tool/palette/layer dock, large center workspace, bottom atlas/filmstrip, and right preview/context inspector. The primary path is clear: draw on the canvas, inspect sheet rows in the filmstrip, click a row/frame, multi-select, duplicate/delete selected row frames, set selected-frame duration/notes/tags, drag-reorder row frames when needed, switch between frame editing and full sprite sheet view, preview, export. AI Assist is available as a focused collapsed surface that defaults to Ollama local, auto-refreshes local Ollama models on browser startup, can pull/download a named model, asks Ollama for selected-frame edit JSON, routes broad whole-asset prompts to a structured animation draft made of frame operation arrays, and injects explicit output/view context for static tiles, walls, ground pieces, backgrounds, side-scroller assets, top-down assets, and 2.5D/three-quarter assets. The editor can switch animations, add a new blank animation with matching layer structure, duplicate animations, rename animations, reorder animations, and delete non-final animations.
 
 Manual paint and erase operations become patch operations:
 
@@ -76,6 +78,7 @@ Future AI operations should stay focused and reviewable: draft a first frame, de
 - React owns current in-memory `SpriteProject`.
 - React owns app mode: home/start or editor.
 - React owns workspace mode: detailed frame editor or full sprite sheet view.
+- React owns AI Assist output/view context as prompt padding state, not as a permanent project constraint.
 - React owns compact UI tabs for the left dock and right contextual inspector.
 - Templates create valid projects through `SpriteProjectTemplate`.
 - New animations create a valid blank first frame and reuse the project layer structure.

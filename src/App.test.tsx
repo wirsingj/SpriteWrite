@@ -374,6 +374,34 @@ describe('App shell', () => {
     expect(container.textContent).toContain('1/1 enabled')
   })
 
+  it('pads Ollama requests with static asset and view context', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          response: '[{"op":"set","x":15,"y":15,"colorId":"ink"}]',
+        }),
+      } as Response),
+    )
+
+    act(() => {
+      root.render(<App />)
+    })
+
+    clickButton('New Project')
+    setTextAreaValue(getRequiredElement('.atlas-request-panel textarea') as HTMLTextAreaElement, 'ground tileable set')
+    setSelectValue(getSelectByLabel('Output'), 'static')
+    setSelectValue(getSelectByLabel('View'), 'top-down')
+
+    await clickButtonAsync('Ask Ollama')
+
+    const requestBody = JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string) as { prompt: string }
+    expect(requestBody.prompt).toContain('Output intent: static asset or tile')
+    expect(requestBody.prompt).toContain('View context: top-down view')
+    expect(requestBody.prompt).toContain('north/east/south/west edge continuity')
+  })
+
   it('asks Ollama for a broad character animation draft and creates editable frames', async () => {
     const makeHeroPatch = (offsetX: number, capeOffset: number) => [
       { op: 'set', x: 15 + offsetX, y: 12, colorId: 'ink' },
@@ -1906,6 +1934,18 @@ describe('App shell', () => {
       valueSetter?.call(select, value)
       select.dispatchEvent(new Event('change', { bubbles: true }))
     })
+  }
+
+  function getSelectByLabel(label: string): HTMLSelectElement {
+    const labelElement = Array.from(container.querySelectorAll('label')).find((candidate) =>
+      candidate.textContent?.includes(label),
+    )
+    const select = labelElement?.querySelector<HTMLSelectElement>('select')
+    if (!select) {
+      throw new Error(`Missing select "${label}".`)
+    }
+
+    return select
   }
 
   function undoWithKeyboard() {
