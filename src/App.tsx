@@ -476,6 +476,10 @@ function App() {
   const [newProjectWidth, setNewProjectWidth] = useState(32)
   const [newProjectHeight, setNewProjectHeight] = useState(32)
   const [newProjectAssetType, setNewProjectAssetType] = useState<SpriteAssetType>('custom')
+  const heroDemoProject = useMemo(
+    () => getProjectTemplate('hero-32-demo').createProject({ name: 'Hero Sprite Demo' }),
+    [],
+  )
   const ollamaModelSuitabilityNote = getOllamaModelSuitabilityNote(activeOllamaModel)
   const spriteWritePromptIntent = useMemo(
     () =>
@@ -2530,6 +2534,7 @@ function App() {
       <main className="app-shell">
         {importInput}
         <StartScreen
+          heroDemoProject={heroDemoProject}
           importErrors={importErrors}
           newProjectAssetType={newProjectAssetType}
           newProjectHeight={newProjectHeight}

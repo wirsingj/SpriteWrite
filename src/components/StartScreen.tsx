@@ -1,9 +1,11 @@
-import type { SpriteAssetType } from '../domain/spriteTypes'
+import type { SpriteAssetType, SpriteProject } from '../domain/spriteTypes'
 import { SPRITE_PROJECT_TEMPLATES } from '../domain/projectTemplates'
 import { ASSET_TYPE_OPTIONS, formatAssetType } from '../domain/assetTypes'
+import { MiniSprite } from './MiniSprite'
 
 export function StartScreen({
   importErrors,
+  heroDemoProject,
   newProjectAssetType,
   newProjectHeight,
   newProjectName,
@@ -27,6 +29,7 @@ export function StartScreen({
   newProjectTemplateId: string
   newProjectWidth: number
   templates: typeof SPRITE_PROJECT_TEMPLATES
+  heroDemoProject: SpriteProject
   onCreateProject: () => void
   onImport: () => void
   onOpenCurrent: () => void
@@ -37,6 +40,9 @@ export function StartScreen({
   onSetTemplate: (templateId: string) => void
   onSetWidth: (width: number) => void
 }) {
+  const heroDemoAnimation = heroDemoProject.animations[0]
+  const heroDemoFrameId = heroDemoAnimation?.frameIds?.[0]
+
   return (
     <section className="start-screen">
       <div className="start-hero">
@@ -138,9 +144,25 @@ export function StartScreen({
               </button>
             ))}
           </div>
-          <button type="button" onClick={onOpenDemo}>
-            Open Hero Demo
-          </button>
+        </section>
+
+        <section className="panel start-panel">
+          <h2>Hero Demo Preview</h2>
+          <p className="status-line">A compact first-party sprite sheet demo: 4x32x32 rows.</p>
+          {heroDemoFrameId ? (
+            <div className="start-demo-preview">
+              <MiniSprite
+                project={heroDemoProject}
+                frameId={heroDemoFrameId}
+              />
+            </div>
+          ) : null}
+          <p className="status-line">Open the full sheet to inspect editable animation rows.</p>
+          <div className="button-stack">
+            <button type="button" onClick={onOpenDemo}>
+              Open Hero Demo
+            </button>
+          </div>
         </section>
 
         <section className="panel start-panel">

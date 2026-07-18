@@ -134,6 +134,12 @@
   font-size: 12px;
 }
 
+.start-demo-preview {
+  display: grid;
+  justify-content: center;
+  margin: 2px 0 4px;
+}
+
 .workbench {
   position: relative;
   z-index: 1;
