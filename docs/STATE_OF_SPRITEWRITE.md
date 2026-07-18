@@ -41,8 +41,9 @@ The app has no backend, database, auth, cloud sync, paid provider API, Cuddler d
 - Preview panel can switch from checkerboard transparency view to a display-only solid background color; exports remain transparent according to export settings.
 - Focused export menu in the header for Project JSON, current frame PNG, current animation strip PNG, full sprite sheet PNG, full sprite sheet PNG plus metadata JSON, and export-plan settings.
 - Collapsed AI Assist surface for Mock/Ollama structured patch proposals against editable grid data.
-- SpriteWrite prompt-intent padding converts plain user requests into constrained provider jobs: selected-frame patch, single-frame draft, or 3-6 frame animation draft.
+- SpriteWrite prompt-intent padding converts plain user requests into constrained provider jobs: selected-frame patch, single-frame draft, 3-6 frame animation draft, or multi-row animation variation set.
 - Ollama broad animation prompts can request a first-pass structured animation draft made of editable frame patch arrays.
+- Ollama recipe prompts can request compact structured parameters for observed stable families: rotating coin, grass tile variation sets, character/hero idle, and tentacle creature variation sets. SpriteWrite expands those recipes into validated editable cell patches; Ollama still does not return opaque raster images.
 - Provider status messages can expand into details for Ollama/provider diagnostics, including padded prompt context, model/base URL, validation errors, and attempted patch/draft JSON when available.
 - Ollama animation-draft prompts explicitly forbid rectangle-style `width`/`height` operation fields and tiny marker patches; strict validation still rejects bad model output rather than silently accepting it.
 - Ollama generate requests use deterministic temperature 0 and `think: false`. Selected-frame patch requests use JSON Schema structured output. Animation drafts use lighter JSON mode plus SpriteWrite validation because strict multi-frame operation-array schemas can stall local qwen models. Empty `{}` animation responses are reported as schema-ignored/thinking-mode output.
@@ -139,8 +140,9 @@ Patch Assistant state:
 - User instruction text.
 - Provider selector.
 - Main Ask panel model controls for refreshing `/api/tags`, pulling/downloading a model through `/api/pull`, and asking `/api/generate`.
-- Plain prompts are padded by SpriteWrite before provider calls. Small edit prompts route to selected-frame patch JSON; static whole-asset prompts such as "gold coin" route to a larger single-frame draft budget; multi-frame or animation prompts route to animation-draft JSON.
-- Broad prompts such as a character idle animation route to animation-draft JSON instead of selected-frame patch JSON.
+- Plain prompts are padded by SpriteWrite before provider calls. Small edit prompts route to selected-frame patch JSON; static whole-asset prompts such as "gold coin" route to a larger single-frame draft budget; multi-frame or animation prompts route to animation-draft JSON or a recipe rail when a stable recipe family is known.
+- Broad prompts such as "hero idle" or a character idle animation route to structured animation drafting instead of selected-frame patch JSON.
+- Multi-variation prompts such as "short grass waving, 3 frames, 4 variations" or "tentacle monster, 3 variations" can return multiple animation rows. SpriteWrite replaces the selected row with the first returned animation and appends additional returned rows after validation.
 - Animation drafts are validated frame-by-frame and rejected before mutation if cells are invalid, out of bounds, use unknown colors, or look too scattered.
 - Vision-oriented Ollama models are not blocked, but the UI warns that they may be a poor fit for strict JSON editing. When model capabilities or Ollama details are available, refresh avoids auto-selecting a vision model if a non-vision model is available.
 - Selected-frame Ollama patch parsing accepts raw arrays, `patch`, `operations`, `ops`, `patchOperations`, `patch_operations`, and single-operation objects. Wrong JSON shapes now produce more specific status errors instead of the vague "not a patch operation array" message.
@@ -327,10 +329,14 @@ Covered:
 - SpriteWrite prompt-intent tests for animation prompt padding, single-frame draft padding, selected-frame patch routing, and frame-count inference
 - Ollama selected-frame response-shape tests for common patch wrapper aliases and animation-draft/wrong-shape errors
 - Ollama request-body tests for JSON Schema selected-frame patch calls, JSON-mode animation draft calls, `think: false`, and empty-object animation draft errors
-- live Ollama integration coverage that calls local `qwen3:14b` when Ollama and that model are available
+- live Ollama integration coverage that calls local `qwen3:14b` when Ollama and that model are available; current live checks cover coin, grass variation sets, hero idle/cape, and tentacle creature variations
 - Ollama animation-draft parsing/provider tests with stubbed fetch
+- Ollama recipe expansion tests for rotating coin, grass variation sets, character idle, and tentacle creature variation sets
+- prompt-intent tests for terse creative requests such as "hero idle" and "tentacle monster, 3 variations"
 - app smoke test for broad Ollama character animation draft creating editable frames
 - app smoke test proving a plain "4-6 frame gold coin spinning animation" request is padded into a 6-frame animation draft before Ollama sees it
+- app smoke test proving a grass variation recipe creates multiple editable animation rows and switches to the full sprite sheet view
+- app smoke test proving a tentacle variation recipe creates connected editable animation rows and switches to the full sprite sheet view
 - app smoke tests for expandable provider details on invalid selected-frame patches and rejected animation drafts
 - app smoke test proving invalid selected-frame Ollama patches do not render canvas proposal overlays
 - app smoke test for warning when a vision-oriented Ollama model is selected

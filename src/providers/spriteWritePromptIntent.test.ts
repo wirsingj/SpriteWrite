@@ -4,6 +4,7 @@ import {
   createSpriteWritePromptIntent,
   inferPromptMode,
   inferRequestedFrameCount,
+  inferRequestedVariationCount,
   looksLikeAnimationOrWholeAssetRequest,
 } from './spriteWritePromptIntent'
 
@@ -52,6 +53,42 @@ describe('SpriteWrite prompt intent', () => {
     expect(inferRequestedFrameCount('make a 4-6 frame spinning animation')).toBe(6)
     expect(inferRequestedFrameCount('make an 18 frame animation')).toBe(6)
     expect(inferRequestedFrameCount('make a 1 frame animation')).toBe(3)
+  })
+
+  it('infers requested variation counts for tile and frame-set prompts', () => {
+    expect(inferRequestedVariationCount('short grass, 4 frame set variations')).toBe(4)
+    expect(inferRequestedVariationCount('make 3 tile sets')).toBe(3)
+    expect(inferRequestedVariationCount('make a 4 frame coin')).toBe(1)
+  })
+
+  it('pads multi-variation prompts as animation set drafts', () => {
+    const intent = createSpriteWritePromptIntent(
+      'short grass waving in the wind, 3 frames, 4 frame set variations that can tile',
+      project,
+    )
+
+    expect(intent.mode).toBe('animation-draft')
+    expect(intent.frameCount).toBe(3)
+    expect(intent.variationCount).toBe(4)
+    expect(intent.summary).toContain('4 editable animation variations')
+  })
+
+  it('routes terse creative animation prompts without explicit frame language', () => {
+    const heroIntent = createSpriteWritePromptIntent('hero idle', project)
+    const tentacleIntent = createSpriteWritePromptIntent('tentacle monster, 3 variations', project)
+
+    expect(heroIntent.mode).toBe('animation-draft')
+    expect(heroIntent.frameCount).toBe(4)
+    expect(heroIntent.variationCount).toBe(1)
+    expect(tentacleIntent.mode).toBe('animation-draft')
+    expect(tentacleIntent.frameCount).toBe(4)
+    expect(tentacleIntent.variationCount).toBe(3)
+    expect(tentacleIntent.summary).toContain('3 editable animation variations')
+  })
+
+  it('keeps terse cleanup requests on the selected-frame patch rail', () => {
+    expect(inferPromptMode('fix idle highlight')).toBe('frame-patch')
+    expect(inferPromptMode('clean tentacle outline')).toBe('frame-patch')
   })
 
   it('routes asset prompts without animation words to draft mode', () => {

@@ -55,6 +55,7 @@ import {
 import { MockPatchProvider } from './providers/mockPatchProvider'
 import {
   listOllamaModels,
+  type OllamaAnimationSetDraft,
   type OllamaAnimationDraft,
   OllamaPatchProvider,
   pullOllamaModel,
@@ -205,6 +206,23 @@ function formatElapsedMs(startedAt: number): string {
   return `${Math.max(0, Math.round(performance.now() - startedAt))}ms`
 }
 
+function slugifyId(value: string, fallback: string): string {
+  const slug = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+
+  return slug || fallback
+}
+
+function allowsDistributedDraft(intent: SpriteWritePromptIntent): boolean {
+  const normalized = intent.userInstruction.toLowerCase()
+  return ['grass', 'tile', 'tileset', 'wall', 'floor', 'terrain', 'background', 'parallax'].some((word) =>
+    normalized.includes(word),
+  )
+}
+
 function parseTagsInput(value: string): string[] {
   const tags = new Map<string, string>()
   value
@@ -274,6 +292,7 @@ function getGeneratedPatchCoherenceErrors(
   frameNumber: number,
   canvasWidth: number,
   canvasHeight: number,
+  options: { allowDistributed?: boolean } = {},
 ): string[] {
   const setOperations = patch.filter(
     (operation): operation is Extract<PixelPatchOperation, { op: 'set' }> => operation.op === 'set',
@@ -293,8 +312,12 @@ function getGeneratedPatchCoherenceErrors(
   const maxUsefulWidth = Math.max(3, Math.ceil(canvasWidth * 0.85))
   const maxUsefulHeight = Math.max(3, Math.ceil(canvasHeight * 0.92))
 
-  if (boxWidth > maxUsefulWidth || boxHeight > maxUsefulHeight) {
+  if (!options.allowDistributed && (boxWidth > maxUsefulWidth || boxHeight > maxUsefulHeight)) {
     return [`Draft frame ${frameNumber} is spread too far across the canvas.`]
+  }
+
+  if (options.allowDistributed) {
+    return []
   }
 
   const cells = new Set(setOperations.map((operation) => cellKey(operation.x, operation.y)))
@@ -783,6 +806,17 @@ function App() {
     return candidate
   }
 
+  function createUniqueAnimationId(draft: SpriteProject, baseId: string): AnimationId {
+    let candidate = baseId
+    let suffix = 2
+    while (draft.animations.some((animation) => animation.id === candidate)) {
+      candidate = `${baseId}-${suffix}`
+      suffix += 1
+    }
+
+    return candidate
+  }
+
   function duplicateSelectedAtlasFrames() {
     const selectedIds = selectedAtlasFrameIdsInRow.length ? selectedAtlasFrameIdsInRow : [selectedFrameId]
     const insertionIndex = Math.max(...selectedIds.map((frameId) => frameIds.indexOf(frameId))) + 1
@@ -1230,6 +1264,21 @@ function App() {
     try {
       const provider = new OllamaPatchProvider({ baseUrl: ollamaBaseUrl, model: ollamaModel })
       const maxDraftOperations = getMaxOllamaDraftOperations(project)
+      if (intent.variationCount > 1) {
+        const setDraft = await provider.requestAnimationSetDraft({
+          project,
+          animationId: selectedAnimation.id,
+          frameId: selectedFrameId,
+          layerId: selectedLayerId,
+          instruction: intent.paddedInstruction,
+          constraints: { selectedColorId, maxOperations: maxDraftOperations },
+          frameCount: intent.frameCount,
+          variationCount: intent.variationCount,
+        })
+        applyOllamaAnimationSetDraft(setDraft, intent.userInstruction, intent, attemptContext)
+        return
+      }
+
       const draft = await provider.requestAnimationDraft({
         project,
         animationId: selectedAnimation.id,
@@ -1352,6 +1401,7 @@ function App() {
           index + 1,
           project.canvas.width,
           project.canvas.height,
+          { allowDistributed: allowsDistributedDraft(intent) },
         ),
       )
       if (!errors.length) {
@@ -1420,6 +1470,202 @@ function App() {
         createdFrameIds,
         animationName: animation.name,
         draft,
+      }),
+    )
+  }
+
+  function applyOllamaAnimationSetDraft(
+    setDraft: OllamaAnimationSetDraft,
+    sourceInstruction = instruction,
+    intent: SpriteWritePromptIntent = spriteWritePromptIntent,
+    attemptContext: ProviderAttemptContext = {
+      attempt: ollamaAttemptRef.current,
+      startedAt: performance.now(),
+    },
+  ) {
+    if (!selectedFrame) {
+      setProviderMessage('Cannot draft animation set because no frame is selected.')
+      setProviderDetails(
+        formatProviderDetails('Ollama animation set rejected', {
+          attempt: attemptContext.attempt,
+          elapsedMs: formatElapsedMs(attemptContext.startedAt),
+          reason: 'No selected frame.',
+          setDraft,
+        }),
+      )
+      return
+    }
+
+    if (!setDraft.animations.length) {
+      setProviderMessage('Ollama animation set rejected. No animation rows were returned.')
+      setProviderDetails(
+        formatProviderDetails('Ollama animation set rejected', {
+          attempt: attemptContext.attempt,
+          elapsedMs: formatElapsedMs(attemptContext.startedAt),
+          reason: 'No animations returned.',
+          setDraft,
+        }),
+      )
+      return
+    }
+
+    const timestamp = Date.now()
+    const oldFrameIds = [...selectedAnimation.frameIds]
+    let nextProject = cloneProject(project)
+    const errors: string[] = []
+    const createdFrameIds: FrameId[] = []
+    const createdAnimationIds: AnimationId[] = []
+    const framePatches: Array<{
+      animationId: AnimationId
+      frameId: FrameId
+      frameNumber: number
+      patch: PixelPatchOperation[]
+    }> = []
+
+    setDraft.animations.forEach((animationDraft, animationIndex) => {
+      const animationId =
+        animationIndex === 0
+          ? selectedAnimation.id
+          : createUniqueAnimationId(
+              nextProject,
+              slugifyId(animationDraft.animationName ?? `ollama-draft-${animationIndex + 1}`, 'ollama-draft'),
+            )
+      const animation =
+        animationIndex === 0
+          ? getAnimation(nextProject, selectedAnimation.id)
+          : {
+              id: animationId,
+              name: animationDraft.animationName?.trim() || `Ollama Draft ${animationIndex + 1}`,
+              fps: animationDraft.fps ?? selectedAnimation.fps,
+              frameIds: [],
+            }
+
+      if (!animation) {
+        errors.push(`Animation row ${animationIndex + 1}: target animation "${selectedAnimation.id}" is missing.`)
+        return
+      }
+
+      if (animationIndex > 0) {
+        nextProject.animations.push(animation)
+      }
+
+      animation.name = animationDraft.animationName?.trim() || animation.name
+      animation.fps = animationDraft.fps ?? animation.fps
+      animation.frameIds = []
+      createdAnimationIds.push(animation.id)
+
+      animationDraft.frames.forEach((frameDraft, frameIndex) => {
+        const frameId = createUniqueFrameId(
+          nextProject,
+          `${animation.id}-ollama-${timestamp}-${frameIndex + 1}`,
+        )
+        const frame: SpriteFrame = {
+          ...structuredClone(selectedFrame),
+          id: frameId,
+          name: frameDraft.name?.trim() || `${animation.name} ${String(frameIndex + 1).padStart(3, '0')}`,
+          durationMs: frameDraft.durationMs ?? selectedFrame.durationMs,
+          notes: `Structured Ollama draft for: ${sourceInstruction}`,
+          tags: Array.from(new Set([...(selectedFrame.tags ?? []), 'ollama-draft'])),
+          layers: selectedFrame.layers.map((layer) => ({ ...structuredClone(layer), cells: {} })),
+        }
+        nextProject.frames.push(frame)
+        animation.frameIds.push(frameId)
+        createdFrameIds.push(frameId)
+        framePatches.push({
+          animationId: animation.id,
+          frameId,
+          frameNumber: frameIndex + 1,
+          patch: frameDraft.patch,
+        })
+      })
+    })
+
+    framePatches.forEach(({ animationId, frameId, frameNumber, patch }) => {
+      const validation = validatePatch(nextProject, animationId, frameId, selectedLayerId, patch)
+      if (!validation.valid) {
+        errors.push(...validation.errors.map((error) => `${animationId} frame ${frameNumber}: ${error}`))
+      }
+      errors.push(
+        ...getGeneratedPatchCoherenceErrors(
+          patch,
+          frameNumber,
+          project.canvas.width,
+          project.canvas.height,
+          { allowDistributed: allowsDistributedDraft(intent) },
+        ).map((error) => `${animationId}: ${error}`),
+      )
+    })
+
+    if (!createdFrameIds.length) {
+      errors.push('Ollama returned animation rows, but no editable frames were created.')
+    }
+
+    if (errors.length) {
+      setPatchErrors(errors)
+      setProviderMessage(
+        `Attempt ${attemptContext.attempt} completed in ${formatElapsedMs(
+          attemptContext.startedAt,
+        )}. Ollama animation set rejected. ${errors.length} validation issue${
+          errors.length === 1 ? '' : 's'
+        } found; no frames were changed. ${summarizeProviderErrors(errors)}`,
+      )
+      setProviderDetails(
+        formatProviderDetails('Ollama animation set rejected', {
+          attempt: attemptContext.attempt,
+          elapsedMs: formatElapsedMs(attemptContext.startedAt),
+          mode: intent.mode,
+          userInstruction: intent.userInstruction,
+          paddedInstruction: intent.paddedInstruction,
+          requestedFrameCount: intent.frameCount,
+          requestedVariationCount: intent.variationCount,
+          baseUrl: ollamaBaseUrl,
+          model: ollamaModel,
+          validationErrors: errors,
+          setDraft,
+        }),
+      )
+      return
+    }
+
+    framePatches.forEach(({ animationId, frameId, patch }) => {
+      nextProject = applyPatch(nextProject, animationId, frameId, selectedLayerId, patch)
+    })
+
+    const activeFrameIds = new Set(nextProject.animations.flatMap((candidate) => candidate.frameIds))
+    nextProject.frames = nextProject.frames.filter(
+      (frame) => !oldFrameIds.includes(frame.id) || activeFrameIds.has(frame.id),
+    )
+    nextProject.metadata.updatedAt = new Date().toISOString()
+
+    commitProject(nextProject)
+    setSelectedAnimationId(createdAnimationIds[0] ?? selectedAnimation.id)
+    setSelectedFrameId(createdFrameIds[0])
+    setSelectedAtlasFrameIds(new Set([createdFrameIds[0]]))
+    setAtlasSelectionAnchorId(createdFrameIds[0])
+    setPreviewIndex(0)
+    setWorkspaceMode('sheet')
+    setProposedPatch([])
+    setDisabledPatchOperationIndexes(new Set())
+    setPatchErrors([])
+    setProviderMessage(
+      `Attempt ${attemptContext.attempt} completed in ${formatElapsedMs(
+        attemptContext.startedAt,
+      )}. Ollama drafted ${setDraft.animations.length} animation row${
+        setDraft.animations.length === 1 ? '' : 's'
+      } with ${createdFrameIds.length} editable frame${createdFrameIds.length === 1 ? '' : 's'}.`,
+    )
+    setProviderDetails(
+      formatProviderDetails('Ollama animation set accepted', {
+        attempt: attemptContext.attempt,
+        elapsedMs: formatElapsedMs(attemptContext.startedAt),
+        mode: intent.mode,
+        userInstruction: intent.userInstruction,
+        paddedInstruction: intent.paddedInstruction,
+        requestedFrameCount: intent.frameCount,
+        requestedVariationCount: intent.variationCount,
+        createdAnimationIds,
+        createdFrameIds,
+        setDraft,
       }),
     )
   }
@@ -2469,7 +2715,9 @@ function App() {
                 {isOllamaBusy && providerChoice === 'ollama'
                   ? 'Working...'
                   : spriteWritePromptIntent.mode === 'animation-draft'
-                    ? 'Ask Ollama For Animation Draft'
+                    ? spriteWritePromptIntent.variationCount > 1
+                      ? 'Ask Ollama For Animation Set'
+                      : 'Ask Ollama For Animation Draft'
                     : spriteWritePromptIntent.mode === 'frame-draft'
                       ? 'Ask Ollama For Frame Draft'
                       : 'Ask Ollama For Frame Patch'}

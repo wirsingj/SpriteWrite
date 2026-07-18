@@ -52,11 +52,13 @@ Verified from repository docs and source inspection on 2026-07-01:
 - Ollama model refresh uses a real installed-model selector, preserves manual model-name entry for downloads/custom names, derives vision suitability from Ollama `details.families` when top-level capabilities are absent, and reports discovered model names in status text.
 - SpriteWrite now pads plain asset prompts before they reach Ollama: small edits route to selected-frame patches, static asset requests route to larger single-frame drafts, and multi-frame/animation requests route to 3-6 frame animation drafts.
 - Ollama broad animation prompts route to a first-pass structured animation-draft path: editable frame patches are requested, validated, checked for basic coherence, and committed only if valid.
+- Ollama broad asset prompts now have a recipe rail for observed qwen-stable cases. Prompts such as rotating gold coin, short grass tile variations, hero idle/cape, and tentacle monster variations can ask Ollama for compact recipe parameters; SpriteWrite deterministically expands those parameters into editable cell patches and animation rows.
+- Live local `qwen3:14b` probes on 2026-07-18 showed compact recipe prompts returning usable JSON quickly for 4-frame rotating gold coin, 4 grass tile variations, hero idle/cape, and 3 tentacle creature variations. Raw all-cell prompts remain more fragile and slower.
 - Provider failures and rejected Ollama drafts now expose an expandable details payload with the padded prompt, model/base URL context, validation errors, and the attempted patch/draft JSON where available.
 - Ollama requests now show attempt number and elapsed time in status/details, and app coverage verifies a second click after a rejected animation draft sends a second provider request.
 - Ollama animation-draft prompts now explicitly forbid rectangle-style `width`/`height` operation fields and tiny marker patches after observed `llama3.2:3b` output violated the cell-operation contract.
 - Ollama generate calls set `think: false` and temperature 0 after observed `qwen3:14b` output returned `{}` when thinking was left enabled/implicit. Selected-frame patch calls use JSON Schema structured output; animation drafts use lighter JSON mode plus SpriteWrite validation because multi-frame operation-array schemas can stall local qwen.
-- `npm test -- --run src/providers/ollamaPatchProvider.test.ts` now includes a live integration check that calls local `qwen3:14b` when Ollama is running and that model is installed. If qwen has stuck work from aborted requests, unloading the model with Ollama `keep_alive: 0` can clear the queue.
+- `npm test -- --run src/providers/ollamaPatchProvider.test.ts` now includes live integration checks that call local `qwen3:14b` when Ollama is running and that model is installed. Current live checks cover coin, grass variation sets, hero idle/cape, and tentacle creature variations. If qwen has stuck work from aborted requests, unloading the model with Ollama `keep_alive: 0` can clear the queue.
 - Patch proposals are JSON operations with validation, preview, include/exclude toggles, removal, apply, and reject.
 - Project JSON import/export exists.
 - PNG exports and sprite sheet metadata are derived through tested layout/raster/canvas export utilities.
@@ -73,7 +75,7 @@ Known project commands from `package.json`:
 - `npm run lint`
 - `npm run typecheck`
 
-Latest verified run on 2026-07-18: `npm run build`, `npm run lint`, `npm run typecheck`, and `npm test -- --run` passed after switching animation drafts to JSON mode with `think: false`; the full test suite includes the live local `qwen3:14b` integration check when available. The test suite has 9 test files and 198 tests.
+Latest verified run on 2026-07-18: `npm run build`, `npm test -- --run`, `npm run lint`, and `npm run typecheck` passed after adding recipe-shaped Ollama draft rails. The full test suite includes live local `qwen3:14b` integration checks when available. The test suite has 9 test files and 211 tests.
 
 ## Current Risks And Uncertainty
 
@@ -81,7 +83,7 @@ Latest verified run on 2026-07-18: `npm run build`, `npm run lint`, `npm run typ
 - `docs/STATE_OF_SPRITEWRITE.md` is detailed and useful, but future agents should verify it against source before relying on every implementation claim.
 - Real browser-level download/export flows and binary PNG checks are still listed as incomplete, but jsdom coverage now exercises Project JSON import, Project JSON export UI behavior, full sprite sheet metadata export UI behavior, current-frame PNG export UI behavior, current-animation strip PNG export UI behavior, full sprite sheet PNG export UI behavior, and browser download helpers.
 - In-app browser smoke on 2026-07-04 verified the start screen, generic New Project flow, editor load, 32x32 grid cell count, and visible export controls through the local Vite dev server. Browser automation did not observe blob-anchor download events, so real download-event coverage remains unresolved.
-- Ollama integration is experimental and must fail gracefully. It can list local models, pull/download a named model through local Ollama, ask the selected model for structured selected-frame patch JSON or a larger single-frame draft, and request first-pass structured animation drafts for multi-frame/animation prompts. SpriteWrite should keep padding plain user prompts into constrained provider requests so users do not have to talk in Ollama contract language. The selected-frame parser accepts common wrappers such as `patch`, `operations`, `ops`, `patchOperations`, `patch_operations`, and a single operation object; wrong JSON shapes surface actionable errors. Do not center product work on provider cleverness, and do not let Ollama return opaque raster output.
+- Ollama integration is experimental and must fail gracefully. It can list local models, pull/download a named model through local Ollama, ask the selected model for structured selected-frame patch JSON or a larger single-frame draft, request first-pass structured animation drafts, and use recipe-shaped provider calls for some common frame-set requests. SpriteWrite should keep padding plain user prompts into constrained provider requests so users do not have to talk in Ollama contract language. The selected-frame parser accepts common wrappers such as `patch`, `operations`, `ops`, `patchOperations`, `patch_operations`, and a single operation object; wrong JSON shapes surface actionable errors. Do not center product work on provider cleverness, and do not let Ollama return opaque raster output.
 - Patch Assistant should remain visibly optional in the UX; the primary product path is draw static or animated grid assets, preview them, export current-frame PNGs, current-animation strip PNGs, full sprite sheet PNGs plus metadata, and save editable Project JSON.
 - The UX should be canvas-first, not dashboard-first: the central pixel canvas and bottom filmstrip are the main workflow; palette/layers are compact; preview/properties are contextual; AI and export are important but secondary focused surfaces.
 - Browser inspection at a temporary 1440x900 viewport verified the refactored editor fits without page scroll: compact header, visible side docks, central canvas, and bottom filmstrip. Full-sheet view also fits.
@@ -99,9 +101,10 @@ Use `docs/STATE_OF_SPRITEWRITE.md` as the detailed active roadmap. Current next-
 
 1. Continue polishing the canvas-first creative workflow: improve icon/tool affordances, refine timeline controls, and keep AI/export from crowding normal drawing.
 2. Shape AI assistance around focused asset operations: improve prompt-intent padding, first-frame draft, derived frame, in-between, pose change with identity/palette preservation, follow-through, variants, silhouette cleanup, palette suggestions, animation structure, selected-cell/layer patches, and continuity evaluation.
-3. Real browser/export download checks or PNG binary smoke tests.
-4. Layer improvements such as folders.
-5. Expanded shortcut configuration beyond paint/erase if the workflow needs it.
+3. Make recipe-based Ollama drafts more inspectable in the UI before acceptance; current recipe expansion commits accepted animation drafts through validation, but recipe choice, retry strategy, partial row acceptance, and recipe/debug visibility need product design.
+4. Real browser/export download checks or PNG binary smoke tests.
+5. Layer improvements such as folders.
+6. Expanded shortcut configuration beyond paint/erase if the workflow needs it.
 
 ## Open Questions
 

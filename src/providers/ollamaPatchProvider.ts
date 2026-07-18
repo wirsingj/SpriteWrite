@@ -1,5 +1,5 @@
 import type { AiPatchProvider, AiPatchRequest } from './aiPatchProvider'
-import type { PixelPatchOperation } from '../domain/spriteTypes'
+import type { PixelPatchOperation, SpriteProject } from '../domain/spriteTypes'
 import { layerCellsToPixels, getFrame, getLayer } from '../domain/spriteData'
 
 export interface OllamaPatchProviderOptions {
@@ -28,6 +28,10 @@ export interface OllamaAnimationDraft {
   animationName?: string
   fps?: number
   frames: OllamaAnimationDraftFrame[]
+}
+
+export interface OllamaAnimationSetDraft {
+  animations: OllamaAnimationDraft[]
 }
 
 type JsonSchema = Record<string, unknown>
@@ -120,6 +124,14 @@ export class OllamaPatchProvider implements AiPatchProvider {
   async requestAnimationDraft(
     request: AiPatchRequest & { frameCount?: number },
   ): Promise<OllamaAnimationDraft> {
+    if (shouldUseRecipeDraft(request.instruction)) {
+      const setDraft = await this.requestAnimationSetDraft({
+        ...request,
+        variationCount: 1,
+      })
+      return setDraft.animations[0]
+    }
+
     const frame = getFrame(request.project, request.frameId)
     const layer = frame ? getLayer(frame, request.layerId) : undefined
     const prompt = buildOllamaAnimationDraftPrompt(request, layer ? layerCellsToPixels(layer) : [])
@@ -152,6 +164,46 @@ export class OllamaPatchProvider implements AiPatchProvider {
     } catch (error) {
       throw new Error(
         `${error instanceof Error ? error.message : 'Ollama did not return a usable animation draft.'}\n\nRaw Ollama response:\n${raw}`,
+        { cause: error },
+      )
+    }
+  }
+
+  async requestAnimationSetDraft(
+    request: AiPatchRequest & { frameCount?: number; variationCount?: number },
+  ): Promise<OllamaAnimationSetDraft> {
+    const prompt = buildOllamaRecipeDraftPrompt(request)
+    const response = await postOllamaGenerate(
+      this.options.baseUrl,
+      {
+        model: this.options.model,
+        stream: false,
+        format: 'json',
+        think: false,
+        options: { temperature: 0 },
+        prompt,
+      },
+      this.options.timeoutMs,
+    )
+
+    if (!response.ok) {
+      throw new Error(`Ollama returned ${response.status} ${response.statusText}`)
+    }
+
+    const payload = (await response.json()) as { response?: string }
+    const raw = payload.response?.trim()
+    if (!raw) {
+      throw new Error('Ollama returned an empty recipe response.')
+    }
+
+    try {
+      return expandOllamaRecipeDraft(parseOllamaRecipeDraftResponse(raw), request.project, {
+        frameCount: Math.max(3, Math.min(6, Math.round(request.frameCount ?? 4))),
+        variationCount: Math.max(1, Math.min(6, Math.round(request.variationCount ?? 1))),
+      })
+    } catch (error) {
+      throw new Error(
+        `${error instanceof Error ? error.message : 'Ollama did not return a usable SpriteWrite recipe.'}\n\nRaw Ollama response:\n${raw}`,
         { cause: error },
       )
     }
@@ -208,6 +260,511 @@ function describeUnexpectedPatchShape(parsed: unknown): string {
 
   const keys = parsed && typeof parsed === 'object' ? Object.keys(parsed).join(', ') : typeof parsed
   return `Ollama response was JSON, but not usable patch operations. Expected [{"op":"set"|"clear",...}] or {"patch":[...]}. Received ${keys || 'unknown shape'}.`
+}
+
+function shouldUseRecipeDraft(instruction: string): boolean {
+  const normalized = instruction.toLowerCase()
+  return (
+    normalized.includes('coin') ||
+    normalized.includes('grass') ||
+    normalized.includes('hero') ||
+    normalized.includes('character') ||
+    normalized.includes('cape') ||
+    normalized.includes('tentacle') ||
+    normalized.includes('monster')
+  )
+}
+
+function parseOllamaRecipeDraftResponse(raw: string): unknown {
+  const parsed = parseOllamaPatchResponse(raw)
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Ollama recipe response must be a JSON object.')
+  }
+  return parsed
+}
+
+function expandOllamaRecipeDraft(
+  recipe: unknown,
+  project: SpriteProject,
+  options: { frameCount: number; variationCount: number },
+): OllamaAnimationSetDraft {
+  if (!recipe || typeof recipe !== 'object' || Array.isArray(recipe)) {
+    throw new Error('Ollama recipe response must be an object.')
+  }
+
+  const candidate = recipe as Record<string, unknown>
+  if (Object.keys(candidate).length === 0) {
+    throw new Error(
+      'Ollama returned an empty JSON object instead of SpriteWrite recipe data. The model ignored the SpriteWrite recipe contract.',
+    )
+  }
+
+  if (candidate.recipe === 'coin_spin') {
+    return {
+      animations: [expandCoinSpinRecipe(candidate, project, options.frameCount)],
+    }
+  }
+
+  if (candidate.recipe === 'grass_wave_tiles') {
+    return expandGrassWaveRecipe(candidate, project, options)
+  }
+
+  if (candidate.recipe === 'character_idle') {
+    return {
+      animations: [expandCharacterIdleRecipe(candidate, project, options.frameCount)],
+    }
+  }
+
+  if (candidate.recipe === 'tentacle_creature_variations') {
+    return expandTentacleCreatureRecipe(candidate, project, options)
+  }
+
+  if ('frames' in candidate && Array.isArray(candidate.frames)) {
+    return {
+      animations: [parseOllamaAnimationDraftObject(candidate)],
+    }
+  }
+
+  throw new Error(`Unsupported SpriteWrite recipe "${String(candidate.recipe)}".`)
+}
+
+function expandCoinSpinRecipe(
+  recipe: Record<string, unknown>,
+  project: SpriteProject,
+  frameCount: number,
+): OllamaAnimationDraft {
+  const frames = Array.isArray(recipe.frames) ? recipe.frames : []
+  const requestedFrameCount = Math.max(3, Math.min(6, frameCount))
+  const defaultRadii = [
+    [4, 5],
+    [2, 5],
+    [4, 5],
+    [2, 5],
+    [3, 5],
+    [1, 5],
+  ]
+
+  return {
+    animationName: typeof recipe.animationName === 'string' ? recipe.animationName : 'Gold Coin',
+    fps: typeof recipe.fps === 'number' && Number.isFinite(recipe.fps) ? Math.round(recipe.fps) : 4,
+    frames: Array.from({ length: requestedFrameCount }, (_, index) => {
+      const frame = frames[index] && typeof frames[index] === 'object' ? (frames[index] as Record<string, unknown>) : {}
+      const [defaultRx, defaultRy] = defaultRadii[index % defaultRadii.length]
+      const rx = clampInteger(frame.rx, 1, 6, defaultRx)
+      const ry = clampInteger(frame.ry, 2, 7, defaultRy)
+      const highlightX = clampInteger(frame.highlightX, -4, 4, index % 2 === 0 ? -1 : 1)
+      const highlightY = clampInteger(frame.highlightY, -4, 4, -2)
+      const shadowX = clampInteger(frame.shadowX, -4, 4, -highlightX)
+      const shadowY = clampInteger(frame.shadowY, -4, 4, 2)
+
+      return {
+        name: typeof frame.name === 'string' ? frame.name : `Gold Coin ${String(index + 1).padStart(3, '0')}`,
+        durationMs: 250,
+        patch: createCoinPatch(project, { rx, ry, highlightX, highlightY, shadowX, shadowY }),
+      }
+    }),
+  }
+}
+
+function createCoinPatch(
+  project: SpriteProject,
+  options: { rx: number; ry: number; highlightX: number; highlightY: number; shadowX: number; shadowY: number },
+): PixelPatchOperation[] {
+  const cx = Math.floor(project.canvas.width / 2)
+  const cy = Math.floor(project.canvas.height / 2)
+  const colors = getRecipeColors(project)
+  const cells = new Map<string, string>()
+
+  for (let y = cy - options.ry; y <= cy + options.ry; y += 1) {
+    for (let x = cx - options.rx; x <= cx + options.rx; x += 1) {
+      const normalized = ((x - cx) / options.rx) ** 2 + ((y - cy) / options.ry) ** 2
+      if (normalized <= 1) {
+        const edge = normalized > 0.68
+        const lower = y > cy + Math.max(1, Math.floor(options.ry / 3))
+        cells.set(`${x},${y}`, edge ? colors.ink : lower ? colors.mid : colors.accent)
+      }
+    }
+  }
+
+  setRecipeCell(cells, cx + options.highlightX, cy + options.highlightY, colors.highlight, project)
+  setRecipeCell(cells, cx + options.highlightX + 1, cy + options.highlightY, colors.highlight, project)
+  setRecipeCell(cells, cx + options.shadowX, cy + options.shadowY, colors.shadow, project)
+  setRecipeCell(cells, cx + options.shadowX - 1, cy + options.shadowY, colors.shadow, project)
+
+  return mapCellsToPatch(cells)
+}
+
+function expandGrassWaveRecipe(
+  recipe: Record<string, unknown>,
+  project: SpriteProject,
+  options: { frameCount: number; variationCount: number },
+): OllamaAnimationSetDraft {
+  const variations = Array.isArray(recipe.variations) ? recipe.variations : []
+
+  return {
+    animations: Array.from({ length: options.variationCount }, (_, index) => {
+      const variation =
+        variations[index] && typeof variations[index] === 'object'
+          ? (variations[index] as Record<string, unknown>)
+          : {}
+      const sourceFrame =
+        Array.isArray(variation.frames) && variation.frames[0] && typeof variation.frames[0] === 'object'
+          ? (variation.frames[0] as Record<string, unknown>)
+          : {}
+      const blades = normalizeGrassBlades(sourceFrame.blades, index)
+
+      return {
+        animationName:
+          typeof variation.animationName === 'string'
+            ? variation.animationName
+            : `Grass ${String.fromCharCode(65 + index)}`,
+        fps: typeof recipe.fps === 'number' && Number.isFinite(recipe.fps) ? Math.round(recipe.fps) : 4,
+        frames: Array.from({ length: options.frameCount }, (_, frameIndex) => {
+          const windCycle = [-1, 0, 1, 0, -1, 1]
+          const wind = windCycle[frameIndex % windCycle.length]
+          const animationName =
+            typeof variation.animationName === 'string'
+              ? variation.animationName
+              : `Grass ${String.fromCharCode(65 + index)}`
+
+          return {
+            name: `${animationName} ${String(frameIndex + 1).padStart(3, '0')}`,
+            durationMs: 250,
+            patch: createGrassPatch(project, blades, wind),
+          }
+        }),
+      }
+    }),
+  }
+}
+
+function normalizeGrassBlades(input: unknown, variationIndex: number) {
+  if (Array.isArray(input) && input.length >= 4) {
+    return input.map((blade, index) => {
+      const candidate = blade && typeof blade === 'object' ? (blade as Record<string, unknown>) : {}
+      return {
+        x: clampInteger(candidate.x, 0, 31, defaultBladeX(index)),
+        baseY: clampInteger(candidate.baseY, 24, 31, 31),
+        height: clampInteger(candidate.height, 2, 8, 4),
+        lean: clampInteger(candidate.lean, -2, 2, 0),
+      }
+    })
+  }
+
+  return Array.from({ length: 8 }, (_, index) => ({
+    x: defaultBladeX(index),
+    baseY: 31 - ((index + variationIndex) % 3),
+    height: 3 + ((index + variationIndex) % 4),
+    lean: ((index + variationIndex) % 3) - 1,
+  }))
+}
+
+function defaultBladeX(index: number): number {
+  return [0, 3, 7, 12, 16, 21, 27, 31][index % 8]
+}
+
+function createGrassPatch(
+  project: SpriteProject,
+  blades: Array<{ x: number; baseY: number; height: number; lean: number }>,
+  wind: number,
+): PixelPatchOperation[] {
+  const colors = getRecipeColors(project)
+  const cells = new Map<string, string>()
+
+  blades.forEach((blade, index) => {
+    const tipX = blade.x + blade.lean + wind
+    const tipY = blade.baseY - blade.height
+    const steps = Math.max(1, blade.height)
+    for (let step = 0; step <= steps; step += 1) {
+      const t = step / steps
+      const x = Math.round(blade.x + (tipX - blade.x) * t)
+      const y = Math.round(blade.baseY + (tipY - blade.baseY) * t)
+      const color = step === steps ? colors.highlight : index % 3 === 0 ? colors.shadow : colors.accent
+      setRecipeCell(cells, x, y, color, project)
+    }
+    setRecipeCell(cells, blade.x, blade.baseY, colors.mid, project)
+  })
+
+  return mapCellsToPatch(cells)
+}
+
+function expandCharacterIdleRecipe(
+  recipe: Record<string, unknown>,
+  project: SpriteProject,
+  frameCount: number,
+): OllamaAnimationDraft {
+  const frames = Array.isArray(recipe.frames) ? recipe.frames : []
+  const requestedFrameCount = Math.max(3, Math.min(6, frameCount))
+  const fallbackBob = [0, 1, 0, -1, 0, 1]
+
+  return {
+    animationName: typeof recipe.animationName === 'string' ? recipe.animationName : 'Hero Idle',
+    fps: typeof recipe.fps === 'number' && Number.isFinite(recipe.fps) ? Math.round(recipe.fps) : 4,
+    frames: Array.from({ length: requestedFrameCount }, (_, index) => {
+      const frame = frames[index] && typeof frames[index] === 'object' ? (frames[index] as Record<string, unknown>) : {}
+      const bob = clampInteger(frame.bob, -1, 1, fallbackBob[index % fallbackBob.length])
+      const capeLean = clampInteger(frame.capeLean, -2, 2, index % 2 === 0 ? -1 : 1)
+      const headTilt = clampInteger(frame.headTilt, -2, 2, 0)
+      const armPose = clampInteger(frame.armPose, -2, 2, index % 2 === 0 ? 0 : 1)
+
+      return {
+        name: typeof frame.name === 'string' ? frame.name : `Hero Idle ${String(index + 1).padStart(3, '0')}`,
+        durationMs: 250,
+        patch: createCharacterIdlePatch(project, { bob, capeLean, headTilt, armPose }),
+      }
+    }),
+  }
+}
+
+function createCharacterIdlePatch(
+  project: SpriteProject,
+  options: { bob: number; capeLean: number; headTilt: number; armPose: number },
+): PixelPatchOperation[] {
+  const cx = Math.floor(project.canvas.width / 2)
+  const baseY = Math.min(project.canvas.height - 5, Math.floor(project.canvas.height * 0.72))
+  const y = options.bob
+  const colors = getRecipeColors(project)
+  const cells = new Map<string, string>()
+
+  // Cape/back silhouette.
+  for (let row = 0; row < 7; row += 1) {
+    const capeX = cx - 4 + Math.round((row / 6) * options.capeLean)
+    setRecipeCell(cells, capeX, baseY - 9 + row + y, colors.shadow, project)
+    setRecipeCell(cells, capeX - 1, baseY - 8 + row + y, colors.shadow, project)
+  }
+
+  // Legs.
+  ;[
+    [cx - 2, baseY - 2],
+    [cx - 2, baseY - 1],
+    [cx - 3, baseY],
+    [cx + 2, baseY - 2],
+    [cx + 2, baseY - 1],
+    [cx + 3, baseY],
+  ].forEach(([cellX, cellY]) => setRecipeCell(cells, cellX, cellY + y, colors.ink, project))
+
+  // Torso and outline.
+  for (let row = 0; row < 6; row += 1) {
+    for (let col = -2; col <= 2; col += 1) {
+      const edge = Math.abs(col) === 2 || row === 0 || row === 5
+      setRecipeCell(cells, cx + col, baseY - 8 + row + y, edge ? colors.ink : colors.accent, project)
+    }
+  }
+
+  // Arms.
+  const armOffset = options.armPose > 0 ? 1 : options.armPose < 0 ? -1 : 0
+  ;[
+    [cx - 3, baseY - 7],
+    [cx - 4, baseY - 6 + armOffset],
+    [cx + 3, baseY - 7],
+    [cx + 4, baseY - 6 - armOffset],
+  ].forEach(([cellX, cellY]) => setRecipeCell(cells, cellX, cellY + y, colors.ink, project))
+
+  // Head.
+  const headY = baseY - 12 + y
+  for (let row = -1; row <= 1; row += 1) {
+    for (let col = -1; col <= 1; col += 1) {
+      setRecipeCell(cells, cx + col + Math.sign(options.headTilt), headY + row, colors.mid, project)
+    }
+  }
+  setRecipeCell(cells, cx - 1 + Math.sign(options.headTilt), headY - 2, colors.ink, project)
+  setRecipeCell(cells, cx + 1 + Math.sign(options.headTilt), headY - 2, colors.ink, project)
+  setRecipeCell(cells, cx - 1 + Math.sign(options.headTilt), headY, colors.highlight, project)
+
+  return mapCellsToPatch(cells)
+}
+
+function expandTentacleCreatureRecipe(
+  recipe: Record<string, unknown>,
+  project: SpriteProject,
+  options: { frameCount: number; variationCount: number },
+): OllamaAnimationSetDraft {
+  const variations = Array.isArray(recipe.variations) ? recipe.variations : []
+
+  return {
+    animations: Array.from({ length: options.variationCount }, (_, index) => {
+      const variation =
+        variations[index] && typeof variations[index] === 'object'
+          ? (variations[index] as Record<string, unknown>)
+          : {}
+      const animationName =
+        typeof variation.animationName === 'string'
+          ? variation.animationName
+          : `Tentacle ${String.fromCharCode(65 + index)}`
+      const base = normalizeTentacleCreature(variation, index)
+
+      return {
+        animationName,
+        fps: typeof recipe.fps === 'number' && Number.isFinite(recipe.fps) ? Math.round(recipe.fps) : 4,
+        frames: Array.from({ length: options.frameCount }, (_, frameIndex) => {
+          const wiggle = [-1, 0, 1, 0, -1, 1][frameIndex % 6]
+
+          return {
+            name: `${animationName} ${String(frameIndex + 1).padStart(3, '0')}`,
+            durationMs: 250,
+            patch: createTentacleCreaturePatch(project, base, wiggle),
+          }
+        }),
+      }
+    }),
+  }
+}
+
+function normalizeTentacleCreature(input: Record<string, unknown>, variationIndex: number) {
+  const tentacles = Array.isArray(input.tentacles) ? input.tentacles : []
+  const fallbackAnchors = ['left', 'right', 'bottom', 'top', 'left', 'right']
+  const normalizedTentacles = Array.from({ length: Math.max(3, Math.min(6, tentacles.length || 4)) }, (_, index) => {
+    const candidate = tentacles[index] && typeof tentacles[index] === 'object' ? (tentacles[index] as Record<string, unknown>) : {}
+    const anchor = typeof candidate.anchor === 'string' ? candidate.anchor : fallbackAnchors[index]
+
+    return {
+      anchor: ['left', 'right', 'bottom', 'top'].includes(anchor) ? anchor : fallbackAnchors[index],
+      length: clampInteger(candidate.length, 3, 9, 5 + ((index + variationIndex) % 3)),
+      curl: clampInteger(candidate.curl, -2, 2, ((index + variationIndex) % 5) - 2),
+    }
+  })
+
+  return {
+    bodyRx: clampInteger(input.bodyRx, 3, 7, 5),
+    bodyRy: clampInteger(input.bodyRy, 3, 6, 4),
+    eyeCount: clampInteger(input.eyeCount, 1, 3, 1 + (variationIndex % 2)),
+    tentacles: normalizedTentacles,
+  }
+}
+
+function createTentacleCreaturePatch(
+  project: SpriteProject,
+  creature: {
+    bodyRx: number
+    bodyRy: number
+    eyeCount: number
+    tentacles: Array<{ anchor: string; length: number; curl: number }>
+  },
+  wiggle: number,
+): PixelPatchOperation[] {
+  const cx = Math.floor(project.canvas.width / 2)
+  const cy = Math.floor(project.canvas.height * 0.56)
+  const colors = getRecipeColors(project)
+  const cells = new Map<string, string>()
+
+  for (let y = cy - creature.bodyRy; y <= cy + creature.bodyRy; y += 1) {
+    for (let x = cx - creature.bodyRx; x <= cx + creature.bodyRx; x += 1) {
+      const normalized = ((x - cx) / creature.bodyRx) ** 2 + ((y - cy) / creature.bodyRy) ** 2
+      if (normalized <= 1) {
+        const edge = normalized > 0.68
+        cells.set(`${x},${y}`, edge ? colors.ink : colors.accent)
+      }
+    }
+  }
+
+  creature.tentacles.forEach((tentacle, index) => {
+    const start = getTentacleAnchor(cx, cy, creature.bodyRx, creature.bodyRy, tentacle.anchor, index)
+    const direction = getTentacleDirection(tentacle.anchor)
+    const side = index % 2 === 0 ? -1 : 1
+    const end = {
+      x: start.x + direction.x * tentacle.length + (tentacle.curl + wiggle) * side,
+      y: start.y + direction.y * tentacle.length + Math.abs(tentacle.curl + wiggle),
+    }
+    drawRecipeLine(cells, start.x, start.y, end.x, end.y, index % 2 === 0 ? colors.shadow : colors.mid, project)
+    setRecipeCell(cells, Math.round(end.x), Math.round(end.y), colors.highlight, project)
+  })
+
+  const eyeOffsets = creature.eyeCount === 1 ? [0] : creature.eyeCount === 2 ? [-2, 2] : [-3, 0, 3]
+  eyeOffsets.forEach((offset) => {
+    setRecipeCell(cells, cx + offset, cy - 1, colors.highlight, project)
+    setRecipeCell(cells, cx + offset, cy, colors.ink, project)
+  })
+
+  return mapCellsToPatch(cells)
+}
+
+function getTentacleAnchor(
+  cx: number,
+  cy: number,
+  bodyRx: number,
+  bodyRy: number,
+  anchor: string,
+  index: number,
+) {
+  if (anchor === 'left') {
+    return { x: cx - bodyRx, y: cy + ((index % 3) - 1) }
+  }
+  if (anchor === 'right') {
+    return { x: cx + bodyRx, y: cy + ((index % 3) - 1) }
+  }
+  if (anchor === 'top') {
+    return { x: cx + ((index % 3) - 1), y: cy - bodyRy }
+  }
+  return { x: cx + ((index % 3) - 1), y: cy + bodyRy }
+}
+
+function getTentacleDirection(anchor: string) {
+  if (anchor === 'left') {
+    return { x: -1, y: 0 }
+  }
+  if (anchor === 'right') {
+    return { x: 1, y: 0 }
+  }
+  if (anchor === 'top') {
+    return { x: 0, y: -1 }
+  }
+  return { x: 0, y: 1 }
+}
+
+function drawRecipeLine(
+  cells: Map<string, string>,
+  startX: number,
+  startY: number,
+  endX: number,
+  endY: number,
+  colorId: string,
+  project: SpriteProject,
+) {
+  const steps = Math.max(Math.abs(Math.round(endX - startX)), Math.abs(Math.round(endY - startY)), 1)
+  for (let step = 0; step <= steps; step += 1) {
+    const t = step / steps
+    setRecipeCell(
+      cells,
+      Math.round(startX + (endX - startX) * t),
+      Math.round(startY + (endY - startY) * t),
+      colorId,
+      project,
+    )
+  }
+}
+
+function getRecipeColors(project: SpriteProject) {
+  const ids = new Set(project.palette.map((color) => color.id))
+  const first = project.palette.find((color) => !color.isTransparent)?.id ?? 'accent'
+  const pick = (...candidates: string[]) => candidates.find((candidate) => ids.has(candidate)) ?? first
+
+  return {
+    ink: pick('ink', 'outline', 'charcoal', 'shadow'),
+    shadow: pick('shadow', 'charcoal', 'mid_gray'),
+    mid: pick('mid_gray', 'slime_mid', 'accent'),
+    accent: pick('accent', 'gold', 'slime_light', first),
+    highlight: pick('white', 'light_gray', 'slime_highlight', 'accent'),
+  }
+}
+
+function setRecipeCell(cells: Map<string, string>, x: number, y: number, colorId: string, project: SpriteProject) {
+  if (x >= 0 && y >= 0 && x < project.canvas.width && y < project.canvas.height) {
+    cells.set(`${x},${y}`, colorId)
+  }
+}
+
+function mapCellsToPatch(cells: Map<string, string>): PixelPatchOperation[] {
+  return Array.from(cells.entries()).map(([key, colorId]) => {
+    const [x, y] = key.split(',').map(Number)
+    return { op: 'set', x, y, colorId }
+  })
+}
+
+function clampInteger(value: unknown, min: number, max: number, fallback: number): number {
+  if (!Number.isFinite(value) || typeof value !== 'number') {
+    return fallback
+  }
+  return Math.max(min, Math.min(max, Math.round(value)))
 }
 
 export async function testOllamaConnection(baseUrl: string): Promise<string> {
@@ -346,6 +903,18 @@ export function parseOllamaAnimationDraftResponse(raw: string): OllamaAnimationD
     throw new Error('Ollama response was JSON, but not an animation draft with frames.')
   }
 
+  return parseOllamaAnimationDraftObject(draft)
+}
+
+function parseOllamaAnimationDraftObject(draft: {
+  animationName?: unknown
+  fps?: unknown
+  frames?: unknown
+}): OllamaAnimationDraft {
+  if (!Array.isArray(draft.frames)) {
+    throw new Error('Ollama response was JSON, but not an animation draft with frames.')
+  }
+
   const frames = draft.frames.map((frame, index) => {
     if (!frame || typeof frame !== 'object') {
       throw new Error(`Ollama draft frame ${index + 1} was not an object.`)
@@ -437,6 +1006,74 @@ Rules:
 
 Current cells: ${JSON.stringify(currentCells)}
 `
+}
+
+function buildOllamaRecipeDraftPrompt(
+  request: AiPatchRequest & { frameCount?: number; variationCount?: number },
+): string {
+  const normalized = request.instruction.toLowerCase()
+  const frameCount = Math.max(3, Math.min(6, Math.round(request.frameCount ?? 4)))
+  const variationCount = Math.max(1, Math.min(6, Math.round(request.variationCount ?? 1)))
+
+  if (normalized.includes('grass')) {
+    return `Return JSON only. No markdown. No cells.
+SpriteWrite padded request:
+${request.instruction}
+Return exactly this shape:
+{"recipe":"grass_wave_tiles","fps":4,"variations":[{"animationName":"Grass A","frames":[{"name":"Grass A 001","wind":-1,"blades":[{"x":0,"baseY":31,"height":4,"lean":-1}]}]}]}
+
+Rules:
+- Return exactly ${variationCount} variations.
+- Each variation may return one base frame; SpriteWrite will expand it into ${frameCount} animation frames.
+- Each base frame must have 6 to 10 blades.
+- Blade x is 0-31, baseY is 28-31, height is 2-8, lean is -2 to 2.
+- Include blades near x 0 and x 31 so the tile can repeat.
+- No patch arrays, no width/height, no prose.`
+  }
+
+  if (normalized.includes('tentacle') || normalized.includes('monster')) {
+    return `Return JSON only. No markdown. No cells.
+SpriteWrite padded request:
+${request.instruction}
+Return exactly this shape:
+{"recipe":"tentacle_creature_variations","fps":4,"variations":[{"animationName":"Tentacle A","bodyRx":5,"bodyRy":4,"eyeCount":1,"tentacles":[{"anchor":"left","length":6,"curl":-1},{"anchor":"right","length":6,"curl":1}]}]}
+
+Rules:
+- Return exactly ${variationCount} variations.
+- Each variation may return one base creature; SpriteWrite will expand it into ${frameCount} animation frames.
+- bodyRx is 3-7, bodyRy is 3-6, eyeCount is 1-3.
+- tentacles must have 3 to 6 items.
+- anchor is one of left, right, bottom, top.
+- length is 3-9, curl is -2 to 2.
+- No patch arrays, no width/height, no prose.`
+  }
+
+  if (normalized.includes('hero') || normalized.includes('character') || normalized.includes('cape')) {
+    return `Return JSON only. No markdown. No cells.
+SpriteWrite padded request:
+${request.instruction}
+Return exactly this shape:
+{"recipe":"character_idle","animationName":"Hero Idle","fps":4,"frames":[{"name":"Hero Idle 001","bob":0,"capeLean":-1,"headTilt":0,"armPose":0}]}
+
+Rules:
+- Return exactly ${frameCount} frames.
+- bob is -1, 0, or 1.
+- capeLean, headTilt, and armPose are integers from -2 to 2.
+- Keep the same character identity across frames.
+- No patch arrays, no width/height, no prose.`
+  }
+
+  return `Return JSON only. No markdown. No cells.
+SpriteWrite padded request:
+${request.instruction}
+Return exactly this shape:
+{"recipe":"coin_spin","animationName":"Gold Coin","fps":4,"frames":[{"name":"Gold Coin 001","rx":4,"ry":5,"highlightX":-1,"highlightY":-2,"shadowX":1,"shadowY":2}]}
+
+Rules:
+- Return exactly ${frameCount} frames.
+- rx and ry are integer radii from 1 to 7.
+- Animate rotation by varying rx and highlight/shadow positions.
+- No patch arrays, no width/height, no prose.`
 }
 
 function normalizeOllamaBaseUrl(baseUrl: string): string {

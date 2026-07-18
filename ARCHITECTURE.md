@@ -72,7 +72,7 @@ instruction + project context -> provider -> PixelPatchOperation[] -> validate -
 Prompt intent padding:
 
 ```text
-plain user request -> SpriteWrite prompt intent -> selected-frame patch, single-frame draft, or animation draft provider rail
+plain user request -> SpriteWrite prompt intent -> selected-frame patch, single-frame draft, animation draft, or animation-set provider rail
 ```
 
 SpriteWrite, not the user, is responsible for padding natural requests into constrained provider instructions with canvas dimensions, palette IDs, frame-count expectations, and output-shape rules.
@@ -82,6 +82,14 @@ Broad animation draft:
 ```text
 whole-asset instruction + project context -> provider -> frame patch arrays -> validate/coherence check -> replace selected animation row or reject without mutation
 ```
+
+Recipe-based animation draft:
+
+```text
+whole-asset instruction + project context -> provider -> compact recipe parameters -> deterministic SpriteWrite expansion -> frame patch arrays -> validate/coherence check -> replace selected row and append additional rows or reject without mutation
+```
+
+Recipe expansion is still structured editing. The provider supplies bounded JSON parameters such as coin radii/highlight positions, grass blades, character idle motion hints, or tentacle creature variation parameters. SpriteWrite derives ordinary `PixelPatchOperation[]` from those parameters and never treats the recipe or any generated canvas as source of truth.
 
 Future AI operations should use the same principle: a provider may suggest editable frame grids, palette changes, duplicated-and-modified frames, or explicit layer operations, but the app must validate and present them for user acceptance before mutation.
 
@@ -113,9 +121,11 @@ SpriteProject -> Project JSON export
 
 ## Provider Architecture
 
-`AiPatchProvider` is the seam for selected-frame patch proposal providers. The Mock provider is deterministic and local. The Ollama provider is experimental and may also expose a structured animation-draft method that returns frame patch arrays. Current provider rails return JSON cell operations.
+`AiPatchProvider` is the seam for selected-frame patch proposal providers. The Mock provider is deterministic and local. The Ollama provider is experimental and may also expose structured animation-draft and animation-set methods. Provider rails return JSON cell operations or compact recipe JSON that SpriteWrite expands into JSON cell operations.
 
-`src/providers/spriteWritePromptIntent.ts` is the small interpretation layer between plain user prompts and provider calls. It currently classifies prompts as selected-frame patches, single-frame drafts, or 3-6 frame animation drafts, then pads the instruction with SpriteWrite constraints before Ollama sees it. Users should not need to manually write provider-contract prompts.
+`src/providers/spriteWritePromptIntent.ts` is the small interpretation layer between plain user prompts and provider calls. It currently classifies prompts as selected-frame patches, single-frame drafts, 3-6 frame animation drafts, or multi-variation animation sets, then pads the instruction with SpriteWrite constraints before Ollama sees it. Users should not need to manually write provider-contract prompts.
+
+Current recipe-shaped Ollama rails cover a few observed qwen-stable families: rotating coin, grass wave/tile variation sets, character/hero idle, and tentacle creature variation sets. Direct animation draft JSON remains accepted when a recipe-routed model returns complete frame patch arrays instead.
 
 Future rails may add structured palette or layer operations, but must remain reviewable, reversible, and derived into `SpriteProject` data before export.
 

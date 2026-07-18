@@ -495,6 +495,140 @@ describe('App shell', () => {
     expect(idle?.frameIds).toHaveLength(6)
   })
 
+  it('applies Ollama grass variation recipes as multiple editable animation rows', async () => {
+    const recipe = {
+      recipe: 'grass_wave_tiles',
+      fps: 4,
+      variations: ['A', 'B', 'C', 'D'].map((label, index) => ({
+        animationName: `Grass ${label}`,
+        frames: [
+          {
+            name: `Grass ${label} 001`,
+            wind: index % 2 ? 1 : -1,
+            blades: [
+              { x: 0, baseY: 31, height: 4 + (index % 2), lean: -1 },
+              { x: 6, baseY: 30, height: 5, lean: 0 },
+              { x: 13, baseY: 31, height: 3 + (index % 3), lean: 1 },
+              { x: 20, baseY: 29, height: 6, lean: -1 },
+              { x: 27, baseY: 31, height: 4, lean: 0 },
+              { x: 31, baseY: 30, height: 5, lean: 1 },
+            ],
+          },
+        ],
+      })),
+    }
+    const fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ response: JSON.stringify(recipe) }),
+    } as Response)
+    vi.stubGlobal('fetch', fetch)
+
+    act(() => {
+      root.render(<App />)
+    })
+
+    clickButton('New Project')
+    const requestInput = getRequiredElement('.atlas-request-panel textarea') as HTMLTextAreaElement
+    setTextAreaValue(
+      requestInput,
+      'short grass waving in the wind, 3 frames, 4 frame set variations that can tile',
+    )
+
+    await clickButtonAsync('Ask Ollama')
+
+    expect(container.textContent).toContain('Ollama drafted 4 animation rows with 12 editable frames.')
+    expect(container.textContent).toContain('Full Sprite Sheet View')
+
+    const { capturedBlob } = setupDownloadCapture()
+    clickButton('Export Project JSON')
+    const exported = JSON.parse((await capturedBlob.current?.text()) ?? '{}') as {
+      animations: Array<{ name: string; frameIds: string[] }>
+    }
+    const grassAnimations = exported.animations.filter((animation) => animation.name.startsWith('Grass '))
+    expect(grassAnimations.map((animation) => animation.name)).toEqual([
+      'Grass A',
+      'Grass B',
+      'Grass C',
+      'Grass D',
+    ])
+    expect(grassAnimations.every((animation) => animation.frameIds.length === 3)).toBe(true)
+  })
+
+  it('applies Ollama tentacle variation recipes as connected editable animation rows', async () => {
+    const recipe = {
+      recipe: 'tentacle_creature_variations',
+      fps: 4,
+      variations: [
+        {
+          animationName: 'Tentacle A',
+          bodyRx: 5,
+          bodyRy: 4,
+          eyeCount: 1,
+          tentacles: [
+            { anchor: 'left', length: 6, curl: -1 },
+            { anchor: 'right', length: 6, curl: 1 },
+            { anchor: 'bottom', length: 5, curl: 0 },
+          ],
+        },
+        {
+          animationName: 'Tentacle B',
+          bodyRx: 6,
+          bodyRy: 5,
+          eyeCount: 2,
+          tentacles: [
+            { anchor: 'left', length: 4, curl: -2 },
+            { anchor: 'right', length: 7, curl: 2 },
+            { anchor: 'bottom', length: 6, curl: 0 },
+          ],
+        },
+        {
+          animationName: 'Tentacle C',
+          bodyRx: 4,
+          bodyRy: 3,
+          eyeCount: 3,
+          tentacles: [
+            { anchor: 'left', length: 5, curl: -1 },
+            { anchor: 'right', length: 8, curl: 1 },
+            { anchor: 'bottom', length: 6, curl: 0 },
+          ],
+        },
+      ],
+    }
+    const fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ response: JSON.stringify(recipe) }),
+    } as Response)
+    vi.stubGlobal('fetch', fetch)
+
+    act(() => {
+      root.render(<App />)
+    })
+
+    clickButton('New Project')
+    const requestInput = getRequiredElement('.atlas-request-panel textarea') as HTMLTextAreaElement
+    setTextAreaValue(requestInput, 'tentacle monster, 3 variations')
+
+    await clickButtonAsync('Ask Ollama')
+
+    expect(container.textContent).toContain('Ollama drafted 3 animation rows with 12 editable frames.')
+    expect(container.textContent).toContain('Full Sprite Sheet View')
+
+    const { capturedBlob } = setupDownloadCapture()
+    clickButton('Export Project JSON')
+    const exported = JSON.parse((await capturedBlob.current?.text()) ?? '{}') as {
+      animations: Array<{ name: string; frameIds: string[] }>
+    }
+    const tentacleAnimations = exported.animations.filter((animation) =>
+      animation.name.startsWith('Tentacle '),
+    )
+    expect(tentacleAnimations.map((animation) => animation.name)).toEqual([
+      'Tentacle A',
+      'Tentacle B',
+      'Tentacle C',
+    ])
+    expect(tentacleAnimations.every((animation) => animation.frameIds.length === 4)).toBe(true)
+  })
+
   it('hides invalid Ollama selected-frame patch overlays until validation passes', async () => {
     vi.stubGlobal(
       'fetch',

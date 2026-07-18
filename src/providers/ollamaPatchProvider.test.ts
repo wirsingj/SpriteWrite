@@ -359,10 +359,205 @@ describe('parseOllamaPatchResponse', () => {
       options: { temperature: 0 },
     })
     expect(requestBody.prompt).toContain('Return exactly 4 frames.')
-    expect(requestBody.prompt).toContain('Each frame patch must draw the full visible frame')
-    expect(requestBody.prompt).toContain('images')
-    expect(requestBody.prompt).toContain('Do not include width, height')
-    expect(requestBody.prompt).toContain('Use 8 to')
+    expect(requestBody.prompt).toContain('"recipe":"character_idle"')
+    expect(requestBody.prompt).toContain('Keep the same character identity across frames')
+    expect(requestBody.prompt).toContain('no width/height')
+    expect(requestBody.prompt).toContain('No patch arrays')
+  })
+
+  it('expands compact Ollama coin recipes into editable animation frames', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          response:
+            '{"recipe":"coin_spin","animationName":"Gold Coin","fps":4,"frames":[{"name":"Gold Coin 001","rx":4,"ry":5,"highlightX":-1,"highlightY":-2,"shadowX":1,"shadowY":2},{"name":"Gold Coin 002","rx":2,"ry":5,"highlightX":1,"highlightY":-2,"shadowX":-1,"shadowY":2},{"name":"Gold Coin 003","rx":4,"ry":5,"highlightX":2,"highlightY":-1,"shadowX":-2,"shadowY":1},{"name":"Gold Coin 004","rx":2,"ry":5,"highlightX":-2,"highlightY":1,"shadowX":2,"shadowY":-1}]}',
+        }),
+      } as Response),
+    )
+
+    const provider = new OllamaPatchProvider({
+      baseUrl: 'http://localhost:11434/',
+      model: 'qwen3:14b',
+    })
+    const draft = await provider.requestAnimationDraft({
+      project: createBlankProject({
+        name: 'Coin',
+        width: 32,
+        height: 32,
+        assetType: 'icon',
+      }),
+      animationId: 'idle',
+      frameId: 'idle-001',
+      layerId: 'base',
+      instruction: '4 frame rotating gold coin',
+      constraints: { selectedColorId: 'accent', maxOperations: 64 },
+      frameCount: 4,
+    })
+
+    expect(draft.animationName).toBe('Gold Coin')
+    expect(draft.frames).toHaveLength(4)
+    expect(draft.frames.every((frame) => frame.patch.length >= 8)).toBe(true)
+    expect(draft.frames.every((frame) => frame.patch.every((operation) => operation.op === 'set'))).toBe(true)
+  })
+
+  it('accepts direct animation draft JSON when a recipe-routed request returns frames', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          response:
+            '{"animationName":"Coin Spin","fps":8,"frames":[{"name":"Coin Spin 001","durationMs":125,"patch":[{"op":"set","x":14,"y":14,"colorId":"accent"},{"op":"set","x":15,"y":14,"colorId":"white"},{"op":"set","x":16,"y":14,"colorId":"accent"},{"op":"set","x":14,"y":15,"colorId":"accent"},{"op":"set","x":15,"y":15,"colorId":"white"},{"op":"set","x":16,"y":15,"colorId":"accent"},{"op":"set","x":14,"y":16,"colorId":"shadow"},{"op":"set","x":15,"y":16,"colorId":"accent"}]}]}',
+        }),
+      } as Response),
+    )
+
+    const provider = new OllamaPatchProvider({
+      baseUrl: 'http://localhost:11434/',
+      model: 'qwen3:14b',
+    })
+    const draft = await provider.requestAnimationDraft({
+      project: createBlankProject({
+        name: 'Coin',
+        width: 32,
+        height: 32,
+        assetType: 'icon',
+      }),
+      animationId: 'idle',
+      frameId: 'idle-001',
+      layerId: 'base',
+      instruction: '4 frame rotating gold coin',
+      constraints: { selectedColorId: 'accent', maxOperations: 64 },
+      frameCount: 4,
+    })
+
+    expect(draft.animationName).toBe('Coin Spin')
+    expect(draft.frames).toHaveLength(1)
+    expect(draft.frames[0].patch).toHaveLength(8)
+  })
+
+  it('expands compact Ollama grass recipes into multiple animation rows', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          response:
+            '{"recipe":"grass_wave_tiles","fps":4,"variations":[{"animationName":"Grass A","frames":[{"name":"Grass A 001","wind":-1,"blades":[{"x":0,"baseY":31,"height":4,"lean":-1},{"x":4,"baseY":30,"height":5,"lean":0},{"x":8,"baseY":31,"height":3,"lean":1},{"x":13,"baseY":29,"height":6,"lean":-1},{"x":18,"baseY":30,"height":4,"lean":1},{"x":24,"baseY":31,"height":5,"lean":0},{"x":31,"baseY":30,"height":4,"lean":1}]}]},{"animationName":"Grass B","frames":[{"name":"Grass B 001","wind":1,"blades":[{"x":0,"baseY":30,"height":5,"lean":1},{"x":5,"baseY":31,"height":4,"lean":0},{"x":10,"baseY":29,"height":6,"lean":-1},{"x":16,"baseY":31,"height":3,"lean":1},{"x":22,"baseY":30,"height":5,"lean":0},{"x":27,"baseY":31,"height":4,"lean":-1},{"x":31,"baseY":29,"height":5,"lean":1}]}]}]}',
+        }),
+      } as Response),
+    )
+
+    const provider = new OllamaPatchProvider({
+      baseUrl: 'http://localhost:11434/',
+      model: 'qwen3:14b',
+    })
+    const setDraft = await provider.requestAnimationSetDraft({
+      project: createBlankProject({
+        name: 'Grass',
+        width: 32,
+        height: 32,
+        assetType: 'tile',
+      }),
+      animationId: 'idle',
+      frameId: 'idle-001',
+      layerId: 'base',
+      instruction: 'short grass waving in the wind, 3 frames, 2 frame set variations',
+      constraints: { selectedColorId: 'accent', maxOperations: 64 },
+      frameCount: 3,
+      variationCount: 2,
+    })
+
+    expect(setDraft.animations.map((animation) => animation.animationName)).toEqual(['Grass A', 'Grass B'])
+    expect(setDraft.animations.every((animation) => animation.frames.length === 3)).toBe(true)
+    expect(
+      setDraft.animations.every((animation) =>
+        animation.frames.every((frame) => frame.patch.length >= 8),
+      ),
+    ).toBe(true)
+  })
+
+  it('expands compact Ollama character idle recipes into editable animation frames', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          response:
+            '{"recipe":"character_idle","animationName":"Hero Idle","fps":4,"frames":[{"name":"Hero Idle 001","bob":0,"capeLean":-1,"headTilt":0,"armPose":0},{"name":"Hero Idle 002","bob":1,"capeLean":0,"headTilt":1,"armPose":1},{"name":"Hero Idle 003","bob":0,"capeLean":1,"headTilt":0,"armPose":0},{"name":"Hero Idle 004","bob":-1,"capeLean":0,"headTilt":-1,"armPose":-1}]}',
+        }),
+      } as Response),
+    )
+
+    const provider = new OllamaPatchProvider({
+      baseUrl: 'http://localhost:11434/',
+      model: 'qwen3:14b',
+    })
+    const draft = await provider.requestAnimationDraft({
+      project: createBlankProject({
+        name: 'Hero',
+        width: 32,
+        height: 32,
+        assetType: 'character',
+      }),
+      animationId: 'idle',
+      frameId: 'idle-001',
+      layerId: 'base',
+      instruction: 'hero idle',
+      constraints: { selectedColorId: 'accent', maxOperations: 64 },
+      frameCount: 4,
+    })
+
+    expect(draft.animationName).toBe('Hero Idle')
+    expect(draft.frames).toHaveLength(4)
+    expect(draft.frames.every((frame) => frame.patch.length >= 20)).toBe(true)
+  })
+
+  it('expands compact Ollama tentacle recipes into multiple editable animation rows', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          response:
+            '{"recipe":"tentacle_creature_variations","fps":4,"variations":[{"animationName":"Tentacle A","bodyRx":5,"bodyRy":4,"eyeCount":1,"tentacles":[{"anchor":"left","length":6,"curl":-1},{"anchor":"right","length":6,"curl":1},{"anchor":"bottom","length":5,"curl":0}]},{"animationName":"Tentacle B","bodyRx":7,"bodyRy":5,"eyeCount":2,"tentacles":[{"anchor":"bottom","length":5,"curl":0},{"anchor":"top","length":7,"curl":2},{"anchor":"left","length":4,"curl":-2}]},{"animationName":"Tentacle C","bodyRx":4,"bodyRy":3,"eyeCount":3,"tentacles":[{"anchor":"right","length":8,"curl":1},{"anchor":"left","length":5,"curl":-1},{"anchor":"bottom","length":6,"curl":0}]}]}',
+        }),
+      } as Response),
+    )
+
+    const provider = new OllamaPatchProvider({
+      baseUrl: 'http://localhost:11434/',
+      model: 'qwen3:14b',
+    })
+    const setDraft = await provider.requestAnimationSetDraft({
+      project: createBlankProject({
+        name: 'Tentacle',
+        width: 32,
+        height: 32,
+        assetType: 'creature',
+      }),
+      animationId: 'idle',
+      frameId: 'idle-001',
+      layerId: 'base',
+      instruction: 'tentacle monster, 3 variations',
+      constraints: { selectedColorId: 'accent', maxOperations: 96 },
+      frameCount: 4,
+      variationCount: 3,
+    })
+
+    expect(setDraft.animations.map((animation) => animation.animationName)).toEqual([
+      'Tentacle A',
+      'Tentacle B',
+      'Tentacle C',
+    ])
+    expect(setDraft.animations.every((animation) => animation.frames.length === 4)).toBe(true)
+    expect(
+      setDraft.animations.every((animation) =>
+        animation.frames.every((frame) => frame.patch.length >= 20),
+      ),
+    ).toBe(true)
   })
 
   it('includes raw Ollama response text when animation draft parsing fails', async () => {
@@ -453,6 +648,105 @@ describe('parseOllamaPatchResponse', () => {
       expect(draft.frames.every((frame) => frame.patch.every((operation) => operation.op === 'set'))).toBe(
         true,
       )
+    },
+    135_000,
+  )
+
+  it(
+    'requests a real qwen3:14b grass variation set when local Ollama is available',
+    async () => {
+      const models = await getAvailableLocalOllamaModels()
+      if (!models.includes('qwen3:14b')) {
+        console.warn('Skipping live qwen3:14b grass set check; local Ollama/model unavailable.')
+        return
+      }
+
+      const provider = new OllamaPatchProvider({
+        baseUrl: 'http://localhost:11434',
+        model: 'qwen3:14b',
+        timeoutMs: 120_000,
+      })
+      const setDraft = await provider.requestAnimationSetDraft({
+        project: createBlankProject({
+          name: 'Live Ollama Grass Test',
+          width: 32,
+          height: 32,
+          assetType: 'tile',
+        }),
+        animationId: 'idle',
+        frameId: 'idle-001',
+        layerId: 'base',
+        instruction:
+          'User request: short grass waving in the wind, 3 frames, 4 frame set variations that can tile. SpriteWrite interpretation: Draft 4 editable animation variations with 3 frames each from this request.',
+        constraints: { selectedColorId: 'accent', maxOperations: 64 },
+        frameCount: 3,
+        variationCount: 4,
+      })
+
+      expect(setDraft.animations).toHaveLength(4)
+      expect(setDraft.animations.every((animation) => animation.frames.length === 3)).toBe(true)
+      expect(
+        setDraft.animations.every((animation) =>
+          animation.frames.every((frame) => frame.patch.length >= 8),
+        ),
+      ).toBe(true)
+    },
+    135_000,
+  )
+
+  it(
+    'requests real qwen3:14b character and creature recipe drafts when local Ollama is available',
+    async () => {
+      const models = await getAvailableLocalOllamaModels()
+      if (!models.includes('qwen3:14b')) {
+        console.warn('Skipping live qwen3:14b character/creature check; local Ollama/model unavailable.')
+        return
+      }
+
+      const provider = new OllamaPatchProvider({
+        baseUrl: 'http://localhost:11434',
+        model: 'qwen3:14b',
+        timeoutMs: 120_000,
+      })
+      const heroDraft = await provider.requestAnimationDraft({
+        project: createBlankProject({
+          name: 'Live Ollama Hero Test',
+          width: 32,
+          height: 32,
+          assetType: 'character',
+        }),
+        animationId: 'idle',
+        frameId: 'idle-001',
+        layerId: 'base',
+        instruction: 'hero idle, wearing a cape',
+        constraints: { selectedColorId: 'accent', maxOperations: 96 },
+        frameCount: 4,
+      })
+      const tentacleDraft = await provider.requestAnimationSetDraft({
+        project: createBlankProject({
+          name: 'Live Ollama Tentacle Test',
+          width: 32,
+          height: 32,
+          assetType: 'creature',
+        }),
+        animationId: 'idle',
+        frameId: 'idle-001',
+        layerId: 'base',
+        instruction: 'tentacle monster, 3 variations',
+        constraints: { selectedColorId: 'accent', maxOperations: 96 },
+        frameCount: 4,
+        variationCount: 3,
+      })
+
+      expect(heroDraft.frames).toHaveLength(4)
+      expect(heroDraft.frames.every((frame) => frame.patch.length >= 20)).toBe(true)
+      expect(tentacleDraft.animations).toHaveLength(3)
+      expect(tentacleDraft.animations.every((animation) => animation.frames.length === 4)).toBe(true)
+      expect(
+        tentacleDraft.animations.every((animation) =>
+          animation.frames.every((frame) => frame.patch.length >= 20),
+        ),
+      ).toBe(true)
     },
     135_000,
   )

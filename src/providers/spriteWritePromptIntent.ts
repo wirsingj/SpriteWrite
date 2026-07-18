@@ -7,6 +7,7 @@ export interface SpriteWritePromptIntent {
   userInstruction: string
   paddedInstruction: string
   frameCount: number
+  variationCount: number
   summary: string
 }
 
@@ -17,6 +18,7 @@ export function createSpriteWritePromptIntent(
   const userInstruction = instruction.trim() || 'Create a readable pixel asset.'
   const mode = inferPromptMode(userInstruction)
   const frameCount = mode === 'animation-draft' ? inferRequestedFrameCount(userInstruction) : 1
+  const variationCount = mode === 'animation-draft' ? inferRequestedVariationCount(userInstruction) : 1
   const paletteIds = project.palette.map((color) => color.id).join(', ')
 
   if (mode === 'animation-draft') {
@@ -39,7 +41,11 @@ export function createSpriteWritePromptIntent(
       userInstruction,
       paddedInstruction,
       frameCount,
-      summary: `SpriteWrite framed this as a ${frameCount}-frame editable animation draft.`,
+      variationCount,
+      summary:
+        variationCount > 1
+          ? `SpriteWrite framed this as ${variationCount} editable animation variations with ${frameCount} frames each.`
+          : `SpriteWrite framed this as a ${frameCount}-frame editable animation draft.`,
     }
   }
 
@@ -48,6 +54,7 @@ export function createSpriteWritePromptIntent(
       mode,
       userInstruction,
       frameCount,
+      variationCount,
       paddedInstruction: [
         `User request: ${userInstruction}`,
         'SpriteWrite interpretation: Draft one full readable editable frame on the selected frame and layer.',
@@ -67,6 +74,7 @@ export function createSpriteWritePromptIntent(
     mode,
     userInstruction,
     frameCount,
+    variationCount,
     paddedInstruction: [
       `User request: ${userInstruction}`,
       'SpriteWrite interpretation: Propose a focused selected-frame edit.',
@@ -88,23 +96,28 @@ export function looksLikeAnimationOrWholeAssetRequest(instruction: string): bool
 export function inferPromptMode(instruction: string): SpriteWritePromptMode {
   const normalized = instruction.toLowerCase()
   const asksForFrameSequence = /\b\d+\s*(?:-|to)?\s*\d*\s*frames?\b/.test(normalized)
+  const asksForVariations = /\b\d+\s*(?:frame\s*set\s*)?variations?\b/.test(normalized)
   const asksForAnimation = [
     'animation',
     'animated',
     'sprite sheet',
     'spritesheet',
     'atlas',
+    'idle',
     'walk cycle',
     'idle cycle',
     'standing',
     'spinning',
     'rotating',
+    'waving',
   ].some((word) => normalized.includes(word))
   const asksForWholeAsset = [
     'character',
     'hero',
     'enemy',
     'creature',
+    'monster',
+    'tentacle',
     'tile',
     'tileset',
     'wall',
@@ -133,7 +146,11 @@ export function inferPromptMode(instruction: string): SpriteWritePromptMode {
 
   const asksForSingleFrame = /\b(?:single|one|1)\s*frames?\b/.test(normalized) || normalized.includes('static')
 
-  if ((asksForFrameSequence || asksForAnimation) && !asksForSingleFrame) {
+  if (smallEditOnly && !asksForFrameSequence && !asksForVariations && !normalized.includes('animation')) {
+    return 'frame-patch'
+  }
+
+  if ((asksForFrameSequence || asksForVariations || asksForAnimation) && !asksForSingleFrame) {
     return 'animation-draft'
   }
 
@@ -157,6 +174,19 @@ export function inferRequestedFrameCount(instruction: string): number {
   }
 
   return 4
+}
+
+export function inferRequestedVariationCount(instruction: string): number {
+  const normalized = instruction.toLowerCase()
+  const variationMatch =
+    normalized.match(/\b(\d+)\s*(?:frame\s*set\s*)?variations?\b/) ??
+    normalized.match(/\b(\d+)\s*(?:tile\s*)?(?:sets?|rows?)\b/)
+
+  if (!variationMatch) {
+    return 1
+  }
+
+  return Math.max(1, Math.min(6, Math.round(Number(variationMatch[1]))))
 }
 
 function clampFrameCount(value: number): number {
