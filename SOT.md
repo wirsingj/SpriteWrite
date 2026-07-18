@@ -53,6 +53,10 @@ Verified from repository docs and source inspection on 2026-07-01:
 - SpriteWrite now pads plain asset prompts before they reach Ollama: small edits route to selected-frame patches, static asset requests route to larger single-frame drafts, and multi-frame/animation requests route to 3-6 frame animation drafts.
 - Ollama broad animation prompts route to a first-pass structured animation-draft path: editable frame patches are requested, validated, checked for basic coherence, and committed only if valid.
 - Provider failures and rejected Ollama drafts now expose an expandable details payload with the padded prompt, model/base URL context, validation errors, and the attempted patch/draft JSON where available.
+- Ollama requests now show attempt number and elapsed time in status/details, and app coverage verifies a second click after a rejected animation draft sends a second provider request.
+- Ollama animation-draft prompts now explicitly forbid rectangle-style `width`/`height` operation fields and tiny marker patches after observed `llama3.2:3b` output violated the cell-operation contract.
+- Ollama generate calls set `think: false` and temperature 0 after observed `qwen3:14b` output returned `{}` when thinking was left enabled/implicit. Selected-frame patch calls use JSON Schema structured output; animation drafts use lighter JSON mode plus SpriteWrite validation because multi-frame operation-array schemas can stall local qwen.
+- `npm test -- --run src/providers/ollamaPatchProvider.test.ts` now includes a live integration check that calls local `qwen3:14b` when Ollama is running and that model is installed. If qwen has stuck work from aborted requests, unloading the model with Ollama `keep_alive: 0` can clear the queue.
 - Patch proposals are JSON operations with validation, preview, include/exclude toggles, removal, apply, and reject.
 - Project JSON import/export exists.
 - PNG exports and sprite sheet metadata are derived through tested layout/raster/canvas export utilities.
@@ -69,7 +73,7 @@ Known project commands from `package.json`:
 - `npm run lint`
 - `npm run typecheck`
 
-Latest verified review run on 2026-07-18: `npm run build`, `npm test -- --run`, `npm run lint`, and `npm run typecheck` passed after adding expandable provider diagnostics for rejected Ollama drafts and invalid patches. The test suite has 9 test files and 196 tests.
+Latest verified run on 2026-07-18: `npm run build`, `npm run lint`, `npm run typecheck`, and `npm test -- --run` passed after switching animation drafts to JSON mode with `think: false`; the full test suite includes the live local `qwen3:14b` integration check when available. The test suite has 9 test files and 198 tests.
 
 ## Current Risks And Uncertainty
 

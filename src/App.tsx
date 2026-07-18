@@ -81,6 +81,10 @@ type DockTab = 'palette' | 'layers'
 type InspectorTab = 'frame' | 'animation'
 type ShortcutAction = 'paint' | 'erase'
 type LayerPresetId = 'art' | 'guide' | 'shadow' | 'highlight'
+type ProviderAttemptContext = {
+  attempt: number
+  startedAt: number
+}
 type CommandItem = {
   id: string
   label: string
@@ -186,7 +190,19 @@ function getDefaultPatchInstruction(project: SpriteProject): string {
 
 function getMaxOllamaDraftOperations(project: SpriteProject): number {
   const cellCount = project.canvas.width * project.canvas.height
-  return Math.min(cellCount, Math.max(128, Math.floor(cellCount * 0.2)))
+  return Math.min(cellCount, 64, Math.max(24, Math.floor(cellCount * 0.12)))
+}
+
+function summarizeProviderErrors(errors: string[]): string {
+  const uniqueErrors = Array.from(new Set(errors))
+  const firstErrors = uniqueErrors.slice(0, 2).join(' ')
+  const remainingCount = uniqueErrors.length - 2
+
+  return remainingCount > 0 ? `${firstErrors} +${remainingCount} more.` : firstErrors
+}
+
+function formatElapsedMs(startedAt: number): string {
+  return `${Math.max(0, Math.round(performance.now() - startedAt))}ms`
 }
 
 function parseTagsInput(value: string): string[] {
@@ -457,6 +473,7 @@ function App() {
   const layerNameInputRef = useRef<HTMLInputElement | null>(null)
   const colorNameInputRef = useRef<HTMLInputElement | null>(null)
   const colorHexInputRef = useRef<HTMLInputElement | null>(null)
+  const ollamaAttemptRef = useRef(0)
   const animationNameInputRef = useRef<HTMLInputElement | null>(null)
   const frameNameInputRef = useRef<HTMLInputElement | null>(null)
   const frameNotesInputRef = useRef<HTMLTextAreaElement | null>(null)
@@ -1110,13 +1127,18 @@ function App() {
 
   async function generateOllamaPatch() {
     setProviderChoice('ollama')
+    const attemptContext: ProviderAttemptContext = {
+      attempt: ollamaAttemptRef.current + 1,
+      startedAt: performance.now(),
+    }
+    ollamaAttemptRef.current = attemptContext.attempt
     if (spriteWritePromptIntent.mode === 'animation-draft') {
-      await generateOllamaAnimationDraft(spriteWritePromptIntent)
+      await generateOllamaAnimationDraft(spriteWritePromptIntent, attemptContext)
       return
     }
 
     setProviderMessage(
-      `${spriteWritePromptIntent.summary} Asking Ollama model "${ollamaModel}" for editable patch JSON...${
+      `Attempt ${attemptContext.attempt}: ${spriteWritePromptIntent.summary} Asking Ollama model "${ollamaModel}" for editable patch JSON...${
         ollamaModelSuitabilityNote ? ` ${ollamaModelSuitabilityNote}` : ''
       }`,
     )
@@ -1140,6 +1162,8 @@ function App() {
       setPatchErrors(validation.errors)
       setProviderDetails(
         formatProviderDetails('Ollama frame patch response', {
+          attempt: attemptContext.attempt,
+          elapsedMs: formatElapsedMs(attemptContext.startedAt),
           mode: spriteWritePromptIntent.mode,
           userInstruction: spriteWritePromptIntent.userInstruction,
           paddedInstruction: spriteWritePromptIntent.paddedInstruction,
@@ -1152,8 +1176,14 @@ function App() {
       )
       setProviderMessage(
         validation.valid
-          ? `Ollama proposed ${patch.length} operation${patch.length === 1 ? '' : 's'}. Review before applying.`
-          : `Ollama returned ${patch.length} operation${patch.length === 1 ? '' : 's'}, but validation found issues. The canvas overlay is hidden until the patch is valid.`,
+          ? `Attempt ${attemptContext.attempt} completed in ${formatElapsedMs(
+              attemptContext.startedAt,
+            )}. Ollama proposed ${patch.length} operation${patch.length === 1 ? '' : 's'}. Review before applying.`
+          : `Attempt ${attemptContext.attempt} completed in ${formatElapsedMs(
+              attemptContext.startedAt,
+            )}. Ollama returned ${patch.length} operation${
+              patch.length === 1 ? '' : 's'
+            }, but validation found issues. The canvas overlay is hidden until the patch is valid.`,
       )
     } catch (error) {
       setProposedPatch([])
@@ -1162,6 +1192,8 @@ function App() {
       setProviderMessage(formatOllamaError(error, ollamaBaseUrl))
       setProviderDetails(
         formatProviderDetails('Ollama frame patch error', {
+          attempt: attemptContext.attempt,
+          elapsedMs: formatElapsedMs(attemptContext.startedAt),
           mode: spriteWritePromptIntent.mode,
           userInstruction: spriteWritePromptIntent.userInstruction,
           paddedInstruction: spriteWritePromptIntent.paddedInstruction,
@@ -1175,10 +1207,17 @@ function App() {
     }
   }
 
-  async function generateOllamaAnimationDraft(intent: SpriteWritePromptIntent = spriteWritePromptIntent) {
+  async function generateOllamaAnimationDraft(
+    intent: SpriteWritePromptIntent = spriteWritePromptIntent,
+    attemptContext: ProviderAttemptContext = {
+      attempt: ollamaAttemptRef.current + 1,
+      startedAt: performance.now(),
+    },
+  ) {
+    ollamaAttemptRef.current = Math.max(ollamaAttemptRef.current, attemptContext.attempt)
     setProviderChoice('ollama')
     setProviderMessage(
-      `${intent.summary} Asking Ollama model "${ollamaModel}" for structured editable frame patches...${
+      `Attempt ${attemptContext.attempt}: ${intent.summary} Asking Ollama model "${ollamaModel}" for structured editable frame patches...${
         ollamaModelSuitabilityNote ? ` ${ollamaModelSuitabilityNote}` : ''
       }`,
     )
@@ -1200,7 +1239,7 @@ function App() {
         constraints: { selectedColorId, maxOperations: maxDraftOperations },
         frameCount: intent.frameCount,
       })
-      applyOllamaAnimationDraft(draft, intent.userInstruction, intent)
+      applyOllamaAnimationDraft(draft, intent.userInstruction, intent, attemptContext)
     } catch (error) {
       setProposedPatch([])
       setDisabledPatchOperationIndexes(new Set())
@@ -1208,6 +1247,8 @@ function App() {
       setProviderMessage(formatOllamaError(error, ollamaBaseUrl))
       setProviderDetails(
         formatProviderDetails('Ollama animation draft error', {
+          attempt: attemptContext.attempt,
+          elapsedMs: formatElapsedMs(attemptContext.startedAt),
           mode: intent.mode,
           userInstruction: intent.userInstruction,
           paddedInstruction: intent.paddedInstruction,
@@ -1226,11 +1267,17 @@ function App() {
     draft: OllamaAnimationDraft,
     sourceInstruction = instruction,
     intent: SpriteWritePromptIntent = spriteWritePromptIntent,
+    attemptContext: ProviderAttemptContext = {
+      attempt: ollamaAttemptRef.current,
+      startedAt: performance.now(),
+    },
   ) {
     if (!selectedFrame) {
       setProviderMessage('Cannot draft animation because no frame is selected.')
       setProviderDetails(
         formatProviderDetails('Ollama animation draft rejected', {
+          attempt: attemptContext.attempt,
+          elapsedMs: formatElapsedMs(attemptContext.startedAt),
           reason: 'No selected frame.',
           draft,
         }),
@@ -1242,6 +1289,8 @@ function App() {
       setProviderMessage('Ollama animation draft rejected. Expected 3 to 6 frames.')
       setProviderDetails(
         formatProviderDetails('Ollama animation draft rejected', {
+          attempt: attemptContext.attempt,
+          elapsedMs: formatElapsedMs(attemptContext.startedAt),
           reason: 'Frame count outside supported MVP range.',
           receivedFrameCount: draft.frames.length,
           requestedFrameCount: intent.frameCount,
@@ -1260,6 +1309,8 @@ function App() {
       setProviderMessage(`Cannot draft animation because animation "${selectedAnimation.id}" is missing.`)
       setProviderDetails(
         formatProviderDetails('Ollama animation draft rejected', {
+          attempt: attemptContext.attempt,
+          elapsedMs: formatElapsedMs(attemptContext.startedAt),
           reason: 'Selected animation was missing.',
           animationId: selectedAnimation.id,
           draft,
@@ -1311,12 +1362,16 @@ function App() {
     if (errors.length) {
       setPatchErrors(errors)
       setProviderMessage(
-        `Ollama animation draft rejected. ${errors.length} validation issue${
+        `Attempt ${attemptContext.attempt} completed in ${formatElapsedMs(
+          attemptContext.startedAt,
+        )}. Ollama animation draft rejected. ${errors.length} validation issue${
           errors.length === 1 ? '' : 's'
-        } found; no frames were changed.`,
+        } found; no frames were changed. ${summarizeProviderErrors(errors)}`,
       )
       setProviderDetails(
         formatProviderDetails('Ollama animation draft rejected', {
+          attempt: attemptContext.attempt,
+          elapsedMs: formatElapsedMs(attemptContext.startedAt),
           mode: intent.mode,
           userInstruction: intent.userInstruction,
           paddedInstruction: intent.paddedInstruction,
@@ -1348,10 +1403,16 @@ function App() {
     setDisabledPatchOperationIndexes(new Set())
     setPatchErrors([])
     setProviderMessage(
-      `Ollama drafted ${createdFrameIds.length} editable frame${createdFrameIds.length === 1 ? '' : 's'} for "${animation.name}".`,
+      `Attempt ${attemptContext.attempt} completed in ${formatElapsedMs(
+        attemptContext.startedAt,
+      )}. Ollama drafted ${createdFrameIds.length} editable frame${
+        createdFrameIds.length === 1 ? '' : 's'
+      } for "${animation.name}".`,
     )
     setProviderDetails(
       formatProviderDetails('Ollama animation draft accepted', {
+        attempt: attemptContext.attempt,
+        elapsedMs: formatElapsedMs(attemptContext.startedAt),
         mode: intent.mode,
         userInstruction: intent.userInstruction,
         paddedInstruction: intent.paddedInstruction,

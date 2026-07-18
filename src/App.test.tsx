@@ -479,7 +479,7 @@ describe('App shell', () => {
     await clickButtonAsync('Ask Ollama')
 
     const requestBody = JSON.parse(fetch.mock.calls[0][1]?.body as string) as { prompt: string }
-    expect(requestBody.prompt).toContain('Return 6 frames.')
+    expect(requestBody.prompt).toContain('Return exactly 6 frames.')
     expect(requestBody.prompt).toContain('User request: a 4-6 frame gold coin spinning animation')
     expect(requestBody.prompt).toContain('SpriteWrite interpretation: Draft a 6-frame editable animation row')
     expect(requestBody.prompt).toContain('For spinning or rotating assets')
@@ -530,13 +530,11 @@ describe('App shell', () => {
         patch: [{ op: 'set', x: 12 + index, y: 14, colorId: 'missing_color' }],
       })),
     }
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ response: JSON.stringify(draft) }),
-      } as Response),
-    )
+    const fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ response: JSON.stringify(draft) }),
+    } as Response)
+    vi.stubGlobal('fetch', fetch)
 
     act(() => {
       root.render(<App />)
@@ -548,13 +546,22 @@ describe('App shell', () => {
 
     await clickButtonAsync('Ask Ollama')
 
+    expect(fetch).toHaveBeenCalledTimes(1)
     expect(container.textContent).toContain('Ollama animation draft rejected.')
+    expect(container.textContent).toContain('Frame 1:')
+    expect(container.textContent).toContain('missing_color')
     expect(container.textContent).toContain('Show provider details')
     const details = container.querySelector('.provider-details pre')?.textContent ?? ''
     expect(details).toContain('"userInstruction": "a 4-6 frame gold coin spinning animation"')
     expect(details).toContain('"validationErrors"')
     expect(details).toContain('missing_color')
     expect(details).toContain('"draft"')
+
+    await clickButtonAsync('Ask Ollama')
+
+    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(container.textContent).toContain('Attempt 2 completed')
+    expect(container.querySelector('.provider-details pre')?.textContent).toContain('"attempt": 2')
   })
 
   it('reorders frames by dragging within an atlas row', async () => {

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createDefaultProject } from '../domain/spriteData'
+import { createBlankProject, createDefaultProject } from '../domain/spriteData'
 import {
   listOllamaModels,
   OllamaPatchProvider,
@@ -12,6 +12,26 @@ import {
 afterEach(() => {
   vi.unstubAllGlobals()
 })
+
+async function getAvailableLocalOllamaModels(): Promise<string[]> {
+  const controller = new AbortController()
+  const timeout = globalThis.setTimeout(() => controller.abort(), 3000)
+
+  try {
+    const response = await fetch('http://localhost:11434/api/tags', { signal: controller.signal })
+    if (!response.ok) {
+      return []
+    }
+    const payload = (await response.json()) as { models?: Array<{ name?: unknown }> }
+    return (payload.models ?? [])
+      .map((model) => model.name)
+      .filter((name): name is string => typeof name === 'string')
+  } catch {
+    return []
+  } finally {
+    globalThis.clearTimeout(timeout)
+  }
+}
 
 describe('parseOllamaPatchResponse', () => {
   it('accepts a raw patch array', () => {
@@ -249,15 +269,24 @@ describe('parseOllamaPatchResponse', () => {
     const requestBody = JSON.parse(fetch.mock.calls[0][1]?.body as string) as {
       model: string
       stream: boolean
-      format: string
+      think: boolean
+      format: Record<string, unknown>
+      options: { temperature: number }
       prompt: string
     }
     expect(requestBody).toMatchObject({
       model: 'llama3.2',
       stream: false,
-      format: 'json',
+      think: false,
+      options: { temperature: 0 },
     })
+    expect(requestBody.format).toMatchObject({
+      type: 'object',
+      required: ['patch'],
+    })
+    expect(JSON.stringify(requestBody.format)).toContain('"maxItems":4')
     expect(requestBody.prompt).toContain('Return JSON only')
+    expect(requestBody.prompt).toContain('Return exactly { "patch": [...] }')
     expect(requestBody.prompt).toContain('Palette IDs:')
   })
 
@@ -317,17 +346,23 @@ describe('parseOllamaPatchResponse', () => {
     const requestBody = JSON.parse(fetch.mock.calls[0][1]?.body as string) as {
       model: string
       stream: boolean
+      think: boolean
       format: string
+      options: { temperature: number }
       prompt: string
     }
     expect(requestBody).toMatchObject({
       model: 'llama3.2',
       stream: false,
+      think: false,
       format: 'json',
+      options: { temperature: 0 },
     })
-    expect(requestBody.prompt).toContain('Return 4 frames.')
-    expect(requestBody.prompt).toContain('Each frame patch builds the full visible pixels')
-    expect(requestBody.prompt).toContain('Do not return an image')
+    expect(requestBody.prompt).toContain('Return exactly 4 frames.')
+    expect(requestBody.prompt).toContain('Each frame patch must draw the full visible frame')
+    expect(requestBody.prompt).toContain('images')
+    expect(requestBody.prompt).toContain('Do not include width, height')
+    expect(requestBody.prompt).toContain('Use 8 to')
   })
 
   it('includes raw Ollama response text when animation draft parsing fails', async () => {
@@ -356,4 +391,69 @@ describe('parseOllamaPatchResponse', () => {
       }),
     ).rejects.toThrow('Raw Ollama response')
   })
+
+  it('explains empty animation draft objects from schema-ignoring models', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ response: '{}' }),
+      } as Response),
+    )
+
+    const provider = new OllamaPatchProvider({
+      baseUrl: 'http://localhost:11434/',
+      model: 'qwen3:14b',
+    })
+
+    await expect(
+      provider.requestAnimationDraft({
+        project: createDefaultProject(),
+        animationId: 'idle',
+        frameId: 'idle-001',
+        layerId: 'base',
+        instruction: 'rotating gold coin. 4 frames',
+        constraints: { selectedColorId: 'slime_mid', maxOperations: 128 },
+        frameCount: 4,
+      }),
+    ).rejects.toThrow('empty JSON object')
+  })
+
+  it(
+    'requests a real qwen3:14b animation draft when local Ollama is available',
+    async () => {
+      const models = await getAvailableLocalOllamaModels()
+      if (!models.includes('qwen3:14b')) {
+        console.warn('Skipping live qwen3:14b integration check; local Ollama/model unavailable.')
+        return
+      }
+
+      const provider = new OllamaPatchProvider({
+        baseUrl: 'http://localhost:11434',
+        model: 'qwen3:14b',
+        timeoutMs: 120_000,
+      })
+      const draft = await provider.requestAnimationDraft({
+        project: createBlankProject({
+          name: 'Live Ollama Coin Test',
+          width: 32,
+          height: 32,
+          assetType: 'icon',
+        }),
+        animationId: 'idle',
+        frameId: 'idle-001',
+        layerId: 'base',
+        instruction: 'User request: gold coin rotating. 3 frames. SpriteWrite interpretation: Draft a 3-frame editable animation row from this request.',
+        constraints: { selectedColorId: 'accent', maxOperations: 32 },
+        frameCount: 3,
+      })
+
+      expect(draft.frames).toHaveLength(3)
+      expect(draft.frames.every((frame) => frame.patch.length >= 8)).toBe(true)
+      expect(draft.frames.every((frame) => frame.patch.every((operation) => operation.op === 'set'))).toBe(
+        true,
+      )
+    },
+    135_000,
+  )
 })

@@ -44,6 +44,8 @@ The app has no backend, database, auth, cloud sync, paid provider API, Cuddler d
 - SpriteWrite prompt-intent padding converts plain user requests into constrained provider jobs: selected-frame patch, single-frame draft, or 3-6 frame animation draft.
 - Ollama broad animation prompts can request a first-pass structured animation draft made of editable frame patch arrays.
 - Provider status messages can expand into details for Ollama/provider diagnostics, including padded prompt context, model/base URL, validation errors, and attempted patch/draft JSON when available.
+- Ollama animation-draft prompts explicitly forbid rectangle-style `width`/`height` operation fields and tiny marker patches; strict validation still rejects bad model output rather than silently accepting it.
+- Ollama generate requests use deterministic temperature 0 and `think: false`. Selected-frame patch requests use JSON Schema structured output. Animation drafts use lighter JSON mode plus SpriteWrite validation because strict multi-frame operation-array schemas can stall local qwen models. Empty `{}` animation responses are reported as schema-ignored/thinking-mode output.
 - Invalid selected-frame patch proposals no longer draw canvas overlays until validation passes.
 - Vision-oriented Ollama model names such as `llava` show a suitability warning because strict JSON patch/draft generation usually works better with text/instruction or code-style models.
 - Main Ollama controls for base URL, local model refresh, installed-model selection, manual model-name input for custom/download names, model download/pull, and visible request status. Model refresh prefers a non-vision model when Ollama reports capabilities or `details.families` includes vision-oriented markers such as `clip`.
@@ -324,6 +326,8 @@ Covered:
 - Ollama patch request success test with stubbed fetch and prompt/body assertions
 - SpriteWrite prompt-intent tests for animation prompt padding, single-frame draft padding, selected-frame patch routing, and frame-count inference
 - Ollama selected-frame response-shape tests for common patch wrapper aliases and animation-draft/wrong-shape errors
+- Ollama request-body tests for JSON Schema selected-frame patch calls, JSON-mode animation draft calls, `think: false`, and empty-object animation draft errors
+- live Ollama integration coverage that calls local `qwen3:14b` when Ollama and that model are available
 - Ollama animation-draft parsing/provider tests with stubbed fetch
 - app smoke test for broad Ollama character animation draft creating editable frames
 - app smoke test proving a plain "4-6 frame gold coin spinning animation" request is padded into a 6-frame animation draft before Ollama sees it
@@ -359,7 +363,7 @@ Not covered yet:
 - No PNG binary/golden tests yet; pixel-level buffer tests cover the export source before PNG encoding, and jsdom tests cover the canvas wrapper.
 - Export UI exposes scale, margin, and spacing for current animation strips and full sprite sheets.
 - Static assets are currently represented as one-frame frame sequences inside the same project model, then exported through Current Frame PNG or one-frame sheet/metadata if needed.
-- Ollama integration is experimental and not the center of the product. SpriteWrite now pads plain prompts into selected-frame patch, single-frame draft, or animation-draft requests, but draft quality depends heavily on local model capability and strict validation may reject rough model output. Vision-oriented models such as `llava` are especially risky for strict JSON output.
+- Ollama integration is experimental and not the center of the product. SpriteWrite now pads plain prompts into selected-frame patch, single-frame draft, or animation-draft requests, but draft quality depends heavily on local model capability and strict validation may reject rough model output. Small models may return too-sparse marker patches or unsupported rectangle fields despite the prompt. Qwen-style thinking models may return `{}` unless `think: false` is set, and aborted long requests can leave Ollama busy until the model finishes or is unloaded. Vision-oriented models such as `llava` are especially risky for strict JSON output.
 
 ## Next Best Development Steps
 

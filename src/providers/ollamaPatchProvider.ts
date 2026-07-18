@@ -5,6 +5,7 @@ import { layerCellsToPixels, getFrame, getLayer } from '../domain/spriteData'
 export interface OllamaPatchProviderOptions {
   baseUrl: string
   model: string
+  timeoutMs?: number
 }
 
 export interface OllamaModelInfo {
@@ -29,6 +30,39 @@ export interface OllamaAnimationDraft {
   frames: OllamaAnimationDraftFrame[]
 }
 
+type JsonSchema = Record<string, unknown>
+type OllamaGenerateBody = {
+  model: string
+  stream: false
+  format: JsonSchema | 'json'
+  think: false
+  options: { temperature: number }
+  prompt: string
+}
+
+const SET_PATCH_OPERATION_SCHEMA: JsonSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['op', 'x', 'y', 'colorId'],
+  properties: {
+    op: { const: 'set' },
+    x: { type: 'integer' },
+    y: { type: 'integer' },
+    colorId: { type: 'string' },
+  },
+}
+
+const CLEAR_PATCH_OPERATION_SCHEMA: JsonSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['op', 'x', 'y'],
+  properties: {
+    op: { const: 'clear' },
+    x: { type: 'integer' },
+    y: { type: 'integer' },
+  },
+}
+
 export class OllamaPatchProvider implements AiPatchProvider {
   id = 'ollama'
   label = 'Ollama Experimental'
@@ -44,16 +78,18 @@ export class OllamaPatchProvider implements AiPatchProvider {
 
     const prompt = buildOllamaPrompt(request, layer ? layerCellsToPixels(layer) : [])
 
-    const response = await fetch(`${normalizeOllamaBaseUrl(this.options.baseUrl)}/api/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    const response = await postOllamaGenerate(
+      this.options.baseUrl,
+      {
         model: this.options.model,
         stream: false,
-        format: 'json',
+        format: createOllamaPatchSchema(request.constraints.maxOperations ?? 24),
+        think: false,
+        options: { temperature: 0 },
         prompt,
-      }),
-    })
+      },
+      this.options.timeoutMs,
+    )
 
     if (!response.ok) {
       throw new Error(`Ollama returned ${response.status} ${response.statusText}`)
@@ -88,16 +124,18 @@ export class OllamaPatchProvider implements AiPatchProvider {
     const layer = frame ? getLayer(frame, request.layerId) : undefined
     const prompt = buildOllamaAnimationDraftPrompt(request, layer ? layerCellsToPixels(layer) : [])
 
-    const response = await fetch(`${normalizeOllamaBaseUrl(this.options.baseUrl)}/api/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    const response = await postOllamaGenerate(
+      this.options.baseUrl,
+      {
         model: this.options.model,
         stream: false,
         format: 'json',
+        think: false,
+        options: { temperature: 0 },
         prompt,
-      }),
-    })
+      },
+      this.options.timeoutMs,
+    )
 
     if (!response.ok) {
       throw new Error(`Ollama returned ${response.status} ${response.statusText}`)
@@ -117,6 +155,49 @@ export class OllamaPatchProvider implements AiPatchProvider {
         { cause: error },
       )
     }
+  }
+}
+
+async function postOllamaGenerate(
+  baseUrl: string,
+  body: OllamaGenerateBody,
+  timeoutMs = 120_000,
+): Promise<Response> {
+  const controller = new AbortController()
+  const timeout = globalThis.setTimeout(() => controller.abort(), timeoutMs)
+
+  try {
+    return await fetch(`${normalizeOllamaBaseUrl(baseUrl)}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error(`Ollama request timed out after ${timeoutMs}ms.`, { cause: error })
+    }
+    throw error
+  } finally {
+    globalThis.clearTimeout(timeout)
+  }
+}
+
+function createOllamaPatchSchema(maxOperations: number): JsonSchema {
+  return {
+    type: 'object',
+    additionalProperties: false,
+    required: ['patch'],
+    properties: {
+      patch: {
+        type: 'array',
+        minItems: 0,
+        maxItems: Math.max(0, Math.round(maxOperations)),
+        items: {
+          oneOf: [SET_PATCH_OPERATION_SCHEMA, CLEAR_PATCH_OPERATION_SCHEMA],
+        },
+      },
+    },
   }
 }
 
@@ -250,6 +331,12 @@ function isPatchOperationObject(value: unknown): value is PixelPatchOperation {
 
 export function parseOllamaAnimationDraftResponse(raw: string): OllamaAnimationDraft {
   const parsed = parseOllamaPatchResponse(raw)
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && Object.keys(parsed).length === 0) {
+    throw new Error(
+      'Ollama returned an empty JSON object instead of animation draft frames. The model ignored the SpriteWrite schema.',
+    )
+  }
+
   const draft =
     parsed && typeof parsed === 'object' && !Array.isArray(parsed) && 'frames' in parsed
       ? (parsed as { animationName?: unknown; fps?: unknown; frames?: unknown })
@@ -291,7 +378,7 @@ function buildOllamaPrompt(
   currentCells: Array<{ x: number; y: number; colorId: string }>,
 ): string {
   return `You are editing a pixel sprite represented as grid cells.
-Return JSON only. Prefer a raw JSON array. If your JSON mode requires an object, return { "patch": [...] }.
+Return JSON only. Return exactly { "patch": [...] }.
 Allowed operations:
 set: { "op": "set", "x": number, "y": number, "colorId": string }
 clear: { "op": "clear", "x": number, "y": number }
@@ -327,48 +414,28 @@ function buildOllamaAnimationDraftPrompt(
   currentCells: Array<{ x: number; y: number; colorId: string }>,
 ): string {
   const requestedFrameCount = Math.max(3, Math.min(6, Math.round(request.frameCount ?? 4)))
-  return `You are drafting an editable pixel animation represented as grid-cell patch operations.
-Return JSON only. Return exactly this object shape:
-{
-  "animationName": "Idle",
-  "fps": 4,
-  "frames": [
-    {
-      "name": "Idle 001",
-      "durationMs": 250,
-      "patch": [
-        { "op": "set", "x": 12, "y": 18, "colorId": "ink" }
-      ]
-    }
-  ]
-}
+  const preferredMaxOperations = Math.min(64, request.constraints.maxOperations ?? 64)
+  return `Return JSON only. No markdown. No prose.
 
-Hard rules:
-- Return ${requestedFrameCount} frames.
-- Each frame patch builds the full visible pixels for that frame on a blank layer.
-- Use set operations only unless explicitly clearing part of an existing frame.
-- Coordinates must be within canvas bounds.
-- colorId must be one of the provided palette IDs.
-- Do not invent colors.
-- Do not resize the canvas.
-- Do not return markdown.
-- Do not return prose.
-- Do not return an image, base64, SVG, or PNG.
-- Keep the sprite readable at small size.
-- Make one coherent connected sprite, not scattered pixels.
-- Follow the SpriteWrite interpretation in the instruction.
-- Keep characters/creatures near the lower center; keep icons, coins, effects, tiles, and UI assets centered.
-- For idle/standing animation, make subtle frame-to-frame motion only.
-- For spinning/rotating animation, vary silhouette width, highlight position, and shadow position across frames.
-- Do not use placeholder marks, X marks, labels, arrows, or diagnostic symbols.
-- Prefer 40 to ${request.constraints.maxOperations} set operations per frame.
-
+Task: ${request.instruction}
 Canvas: ${request.project.canvas.width}x${request.project.canvas.height}
 Palette IDs: ${request.project.palette.map((color) => color.id).join(', ')}
-Selected color: ${request.constraints.selectedColorId}
-Instruction: ${request.instruction}
-Current layer cells JSON:
-${JSON.stringify(currentCells)}
+
+Return exactly this shape:
+{"animationName":"Name","fps":4,"frames":[{"name":"Frame 001","durationMs":250,"patch":[{"op":"set","x":15,"y":15,"colorId":"accent"}]}]}
+
+Rules:
+- Return exactly ${requestedFrameCount} frames.
+- Each frame patch must draw the full visible frame on a blank layer.
+- Use only set operations.
+- Each operation must be exactly {"op":"set","x":number,"y":number,"colorId":string}.
+- Do not include width, height, radius, size, alpha, labels, markdown, prose, images, or invented colors.
+- Coordinates must be integers inside the ${request.project.canvas.width}x${request.project.canvas.height} canvas.
+- Use 8 to ${preferredMaxOperations} set operations per frame.
+- Keep the sprite centered and coherent, not scattered.
+- For rotating/spinning assets, vary silhouette width and highlight position across frames.
+
+Current cells: ${JSON.stringify(currentCells)}
 `
 }
 
