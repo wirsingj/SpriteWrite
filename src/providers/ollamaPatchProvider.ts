@@ -1,5 +1,5 @@
 import type { AiPatchProvider, AiPatchRequest } from './aiPatchProvider'
-import type { PixelPatchOperation, SpriteProject } from '../domain/spriteTypes'
+import type { PaletteColor, PixelPatchOperation, SpriteProject } from '../domain/spriteTypes'
 import { layerCellsToPixels, getFrame, getLayer } from '../domain/spriteData'
 
 export interface OllamaPatchProviderOptions {
@@ -27,6 +27,7 @@ export interface OllamaAnimationDraftFrame {
 export interface OllamaAnimationDraft {
   animationName?: string
   fps?: number
+  paletteAdditions?: PaletteColor[]
   frames: OllamaAnimationDraftFrame[]
 }
 
@@ -265,7 +266,6 @@ function describeUnexpectedPatchShape(parsed: unknown): string {
 function shouldUseRecipeDraft(instruction: string): boolean {
   const normalized = instruction.toLowerCase()
   return (
-    normalized.includes('coin') ||
     normalized.includes('grass') ||
     normalized.includes('hero') ||
     normalized.includes('character') ||
@@ -299,12 +299,6 @@ function expandOllamaRecipeDraft(
     )
   }
 
-  if (candidate.recipe === 'coin_spin') {
-    return {
-      animations: [expandCoinSpinRecipe(candidate, project, options.frameCount)],
-    }
-  }
-
   if (candidate.recipe === 'grass_wave_tiles') {
     return expandGrassWaveRecipe(candidate, project, options)
   }
@@ -326,72 +320,6 @@ function expandOllamaRecipeDraft(
   }
 
   throw new Error(`Unsupported SpriteWrite recipe "${String(candidate.recipe)}".`)
-}
-
-function expandCoinSpinRecipe(
-  recipe: Record<string, unknown>,
-  project: SpriteProject,
-  frameCount: number,
-): OllamaAnimationDraft {
-  const frames = Array.isArray(recipe.frames) ? recipe.frames : []
-  const requestedFrameCount = Math.max(3, Math.min(6, frameCount))
-  const defaultRadii = [
-    [4, 5],
-    [2, 5],
-    [4, 5],
-    [2, 5],
-    [3, 5],
-    [1, 5],
-  ]
-
-  return {
-    animationName: typeof recipe.animationName === 'string' ? recipe.animationName : 'Gold Coin',
-    fps: typeof recipe.fps === 'number' && Number.isFinite(recipe.fps) ? Math.round(recipe.fps) : 4,
-    frames: Array.from({ length: requestedFrameCount }, (_, index) => {
-      const frame = frames[index] && typeof frames[index] === 'object' ? (frames[index] as Record<string, unknown>) : {}
-      const [defaultRx, defaultRy] = defaultRadii[index % defaultRadii.length]
-      const rx = clampInteger(frame.rx, 1, 6, defaultRx)
-      const ry = clampInteger(frame.ry, 2, 7, defaultRy)
-      const highlightX = clampInteger(frame.highlightX, -4, 4, index % 2 === 0 ? -1 : 1)
-      const highlightY = clampInteger(frame.highlightY, -4, 4, -2)
-      const shadowX = clampInteger(frame.shadowX, -4, 4, -highlightX)
-      const shadowY = clampInteger(frame.shadowY, -4, 4, 2)
-
-      return {
-        name: typeof frame.name === 'string' ? frame.name : `Gold Coin ${String(index + 1).padStart(3, '0')}`,
-        durationMs: 250,
-        patch: createCoinPatch(project, { rx, ry, highlightX, highlightY, shadowX, shadowY }),
-      }
-    }),
-  }
-}
-
-function createCoinPatch(
-  project: SpriteProject,
-  options: { rx: number; ry: number; highlightX: number; highlightY: number; shadowX: number; shadowY: number },
-): PixelPatchOperation[] {
-  const cx = Math.floor(project.canvas.width / 2)
-  const cy = Math.floor(project.canvas.height / 2)
-  const colors = getRecipeColors(project)
-  const cells = new Map<string, string>()
-
-  for (let y = cy - options.ry; y <= cy + options.ry; y += 1) {
-    for (let x = cx - options.rx; x <= cx + options.rx; x += 1) {
-      const normalized = ((x - cx) / options.rx) ** 2 + ((y - cy) / options.ry) ** 2
-      if (normalized <= 1) {
-        const edge = normalized > 0.68
-        const lower = y > cy + Math.max(1, Math.floor(options.ry / 3))
-        cells.set(`${x},${y}`, edge ? colors.ink : lower ? colors.mid : colors.accent)
-      }
-    }
-  }
-
-  setRecipeCell(cells, cx + options.highlightX, cy + options.highlightY, colors.highlight, project)
-  setRecipeCell(cells, cx + options.highlightX + 1, cy + options.highlightY, colors.highlight, project)
-  setRecipeCell(cells, cx + options.shadowX, cy + options.shadowY, colors.shadow, project)
-  setRecipeCell(cells, cx + options.shadowX - 1, cy + options.shadowY, colors.shadow, project)
-
-  return mapCellsToPatch(cells)
 }
 
 function expandGrassWaveRecipe(
@@ -909,6 +837,7 @@ export function parseOllamaAnimationDraftResponse(raw: string): OllamaAnimationD
 function parseOllamaAnimationDraftObject(draft: {
   animationName?: unknown
   fps?: unknown
+  paletteAdditions?: unknown
   frames?: unknown
 }): OllamaAnimationDraft {
   if (!Array.isArray(draft.frames)) {
@@ -938,8 +867,34 @@ function parseOllamaAnimationDraftObject(draft: {
   return {
     animationName: typeof draft.animationName === 'string' ? draft.animationName : undefined,
     fps: typeof draft.fps === 'number' && Number.isFinite(draft.fps) ? Math.max(1, Math.round(draft.fps)) : undefined,
+    paletteAdditions: parsePaletteAdditions(draft.paletteAdditions),
     frames,
   }
+}
+
+function parsePaletteAdditions(input: unknown): PaletteColor[] | undefined {
+  if (input === undefined) {
+    return undefined
+  }
+  if (!Array.isArray(input)) {
+    throw new Error('Ollama draft paletteAdditions must be an array when provided.')
+  }
+
+  return input.map((color, index) => {
+    if (!color || typeof color !== 'object') {
+      throw new Error(`Ollama draft paletteAdditions item ${index + 1} was not an object.`)
+    }
+    const candidate = color as { id?: unknown; name?: unknown; hex?: unknown }
+    if (typeof candidate.id !== 'string' || typeof candidate.name !== 'string' || typeof candidate.hex !== 'string') {
+      throw new Error(`Ollama draft paletteAdditions item ${index + 1} must include id, name, and hex strings.`)
+    }
+
+    return {
+      id: candidate.id,
+      name: candidate.name,
+      hex: candidate.hex,
+    }
+  })
 }
 
 function buildOllamaPrompt(
@@ -991,7 +946,7 @@ Canvas: ${request.project.canvas.width}x${request.project.canvas.height}
 Palette IDs: ${request.project.palette.map((color) => color.id).join(', ')}
 
 Return exactly this shape:
-{"animationName":"Name","fps":4,"frames":[{"name":"Frame 001","durationMs":250,"patch":[{"op":"set","x":15,"y":15,"colorId":"accent"}]}]}
+{"animationName":"Name","fps":4,"paletteAdditions":[{"id":"asset_gold","name":"Asset Gold","hex":"#d99a1e"}],"frames":[{"name":"Frame 001","durationMs":250,"patch":[{"op":"set","x":15,"y":15,"colorId":"accent"}]}]}
 
 Rules:
 - Return exactly ${requestedFrameCount} frames.
@@ -999,6 +954,8 @@ Rules:
 - Use only set operations.
 - Each operation must be exactly {"op":"set","x":number,"y":number,"colorId":string}.
 - Do not include width, height, radius, size, alpha, labels, markdown, prose, images, or invented colors.
+- Operation colorId must be one of the provided palette IDs or one of your paletteAdditions IDs.
+- If the current palette lacks colors clearly needed by the requested asset, include 1 to 6 paletteAdditions with stable lowercase IDs, readable names, and valid #rrggbb hex values.
 - Coordinates must be integers inside the ${request.project.canvas.width}x${request.project.canvas.height} canvas.
 - Use 8 to ${preferredMaxOperations} set operations per frame.
 - Keep the sprite centered and coherent, not scattered.
@@ -1063,17 +1020,19 @@ Rules:
 - No patch arrays, no width/height, no prose.`
   }
 
-  return `Return JSON only. No markdown. No cells.
+  return `Return JSON only. No markdown. No prose.
 SpriteWrite padded request:
 ${request.instruction}
 Return exactly this shape:
-{"recipe":"coin_spin","animationName":"Gold Coin","fps":4,"frames":[{"name":"Gold Coin 001","rx":4,"ry":5,"highlightX":-1,"highlightY":-2,"shadowX":1,"shadowY":2}]}
+{"animationName":"Asset Draft","fps":4,"paletteAdditions":[{"id":"asset_gold","name":"Asset Gold","hex":"#d99a1e"}],"frames":[{"name":"Asset Draft 001","durationMs":250,"patch":[{"op":"set","x":15,"y":15,"colorId":"accent"}]}]}
 
 Rules:
 - Return exactly ${frameCount} frames.
-- rx and ry are integer radii from 1 to 7.
-- Animate rotation by varying rx and highlight/shadow positions.
-- No patch arrays, no width/height, no prose.`
+- Each frame patch must draw the full visible frame on a blank layer.
+- Use only set operations.
+- colorId must be one of the provided palette IDs or one of your paletteAdditions IDs.
+- If the current palette lacks colors clearly needed by the requested asset, include 1 to 6 paletteAdditions with stable lowercase IDs, readable names, and valid #rrggbb hex values.
+- Do not include width/height fields, markdown, prose, labels, placeholder marks, or raster image data.`
 }
 
 function normalizeOllamaBaseUrl(baseUrl: string): string {

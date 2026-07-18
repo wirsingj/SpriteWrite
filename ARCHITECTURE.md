@@ -91,7 +91,9 @@ Recipe-based animation draft:
 whole-asset instruction + project context -> provider -> compact recipe parameters -> deterministic SpriteWrite expansion -> frame patch arrays -> validate/coherence check -> replace selected row and append additional rows or reject without mutation
 ```
 
-Recipe expansion is still structured editing. The provider supplies bounded JSON parameters such as coin radii/highlight positions, grass blades, character idle motion hints, or tentacle creature variation parameters. SpriteWrite derives ordinary `PixelPatchOperation[]` from those parameters and never treats the recipe or any generated canvas as source of truth.
+Recipe expansion is still structured editing. The provider supplies bounded JSON parameters such as grass blades, character idle motion hints, or tentacle creature variation parameters. SpriteWrite derives ordinary `PixelPatchOperation[]` from those parameters and never treats the recipe or any generated canvas as source of truth.
+
+Direct animation drafts may include `paletteAdditions`. SpriteWrite validates and merges those colors before validating frame operations. This lets the provider intuit asset-specific palettes while keeping palette state explicit in `SpriteProject`.
 
 Future AI operations should use the same principle: a provider may suggest editable frame grids, palette changes, duplicated-and-modified frames, or explicit layer operations, but the app must validate and present them for user acceptance before mutation.
 
@@ -127,7 +129,7 @@ SpriteProject -> Project JSON export
 
 `src/providers/spriteWritePromptIntent.ts` is the small interpretation layer between plain user prompts and provider calls. It currently classifies prompts as selected-frame edits, single-frame drafts, 3-6 frame animation drafts, or multi-variation animation sets, then pads the instruction with SpriteWrite constraints before Ollama sees it. Users should not need to manually write provider-contract prompts.
 
-Current recipe-shaped Ollama rails cover a few observed qwen-stable families: rotating coin, grass wave/tile variation sets, character/hero idle, and tentacle creature variation sets. Direct animation draft JSON remains accepted when a recipe-routed model returns complete frame patch arrays instead.
+Current recipe-shaped Ollama rails cover a few observed qwen-stable structural families: grass wave/tile variation sets, character/hero idle, and tentacle creature variation sets. Asset-specific requests such as rotating gold coins should generally use direct animation draft JSON with optional palette additions rather than SpriteWrite-owned art generators.
 
 Future rails may add structured palette or layer operations, but must remain reviewable, reversible, and derived into `SpriteProject` data before export.
 

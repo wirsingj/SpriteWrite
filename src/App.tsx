@@ -43,6 +43,7 @@ import { createFullSpriteSheetLayout, createSpriteSheetLayout } from './domain/e
 import type {
   AnimationId,
   FrameId,
+  PaletteColor,
   PixelPatchOperation,
   SpriteAssetType,
   SpriteFrame,
@@ -1375,6 +1376,46 @@ function App() {
     }
   }
 
+  function mergeDraftPaletteAdditions(
+    baseProject: SpriteProject,
+    additions: PaletteColor[] | undefined,
+  ): { project: SpriteProject; errors: string[] } {
+    if (!additions?.length) {
+      return { project: baseProject, errors: [] }
+    }
+
+    let nextProject = baseProject
+    const errors: string[] = []
+    const seenIds = new Set<string>()
+
+    additions.forEach((color, index) => {
+      const id = color.id.trim()
+      if (!id) {
+        errors.push(`Palette addition ${index + 1}: color id must not be empty.`)
+        return
+      }
+      if (seenIds.has(id) || getColor(nextProject, id)) {
+        seenIds.add(id)
+        return
+      }
+      seenIds.add(id)
+
+      try {
+        nextProject = addPaletteColorToProject(nextProject, {
+          id,
+          name: color.name,
+          hex: color.hex,
+        })
+      } catch (error) {
+        errors.push(
+          `Palette addition "${id}": ${error instanceof Error ? error.message : 'could not be added.'}`,
+        )
+      }
+    })
+
+    return { project: nextProject, errors }
+  }
+
   function applyOllamaAnimationDraft(
     draft: OllamaAnimationDraft,
     sourceInstruction = instruction,
@@ -1416,6 +1457,28 @@ function App() {
     const oldFrameIds = [...selectedAnimation.frameIds]
     const createdFrameIds: FrameId[] = []
     let nextProject = cloneProject(project)
+    const paletteMerge = mergeDraftPaletteAdditions(nextProject, draft.paletteAdditions)
+    if (paletteMerge.errors.length) {
+      setPatchErrors(paletteMerge.errors)
+      setProviderMessage(
+        `Attempt ${attemptContext.attempt} completed in ${formatElapsedMs(
+          attemptContext.startedAt,
+        )}. Ollama animation draft rejected. Palette additions were invalid; no frames were changed.`,
+      )
+      setProviderDetails(
+        formatProviderDetails('Ollama animation draft rejected', {
+          attempt: attemptContext.attempt,
+          elapsedMs: formatElapsedMs(attemptContext.startedAt),
+          mode: intent.mode,
+          userInstruction: intent.userInstruction,
+          paddedInstruction: intent.paddedInstruction,
+          validationErrors: paletteMerge.errors,
+          draft,
+        }),
+      )
+      return
+    }
+    nextProject = paletteMerge.project
     const animation = getAnimation(nextProject, selectedAnimation.id)
     if (!animation) {
       setProviderMessage(`Cannot draft animation because animation "${selectedAnimation.id}" is missing.`)
@@ -1575,6 +1638,31 @@ function App() {
     const timestamp = Date.now()
     const oldFrameIds = [...selectedAnimation.frameIds]
     let nextProject = cloneProject(project)
+    const paletteMerge = mergeDraftPaletteAdditions(
+      nextProject,
+      setDraft.animations.flatMap((animationDraft) => animationDraft.paletteAdditions ?? []),
+    )
+    if (paletteMerge.errors.length) {
+      setPatchErrors(paletteMerge.errors)
+      setProviderMessage(
+        `Attempt ${attemptContext.attempt} completed in ${formatElapsedMs(
+          attemptContext.startedAt,
+        )}. Ollama animation set rejected. Palette additions were invalid; no frames were changed.`,
+      )
+      setProviderDetails(
+        formatProviderDetails('Ollama animation set rejected', {
+          attempt: attemptContext.attempt,
+          elapsedMs: formatElapsedMs(attemptContext.startedAt),
+          mode: intent.mode,
+          userInstruction: intent.userInstruction,
+          paddedInstruction: intent.paddedInstruction,
+          validationErrors: paletteMerge.errors,
+          setDraft,
+        }),
+      )
+      return
+    }
+    nextProject = paletteMerge.project
     const errors: string[] = []
     const createdFrameIds: FrameId[] = []
     const createdAnimationIds: AnimationId[] = []

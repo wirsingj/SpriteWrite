@@ -365,14 +365,14 @@ describe('parseOllamaPatchResponse', () => {
     expect(requestBody.prompt).toContain('No patch arrays')
   })
 
-  it('expands compact Ollama coin recipes into editable animation frames', async () => {
+  it('parses direct animation drafts with provider-suggested palette additions', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
           response:
-            '{"recipe":"coin_spin","animationName":"Gold Coin","fps":4,"frames":[{"name":"Gold Coin 001","rx":4,"ry":5,"highlightX":-1,"highlightY":-2,"shadowX":1,"shadowY":2},{"name":"Gold Coin 002","rx":2,"ry":5,"highlightX":1,"highlightY":-2,"shadowX":-1,"shadowY":2},{"name":"Gold Coin 003","rx":4,"ry":5,"highlightX":2,"highlightY":-1,"shadowX":-2,"shadowY":1},{"name":"Gold Coin 004","rx":2,"ry":5,"highlightX":-2,"highlightY":1,"shadowX":2,"shadowY":-1}]}',
+            '{"animationName":"Gold Coin","fps":4,"paletteAdditions":[{"id":"coin_gold","name":"Coin Gold","hex":"#d99a1e"},{"id":"coin_highlight","name":"Coin Highlight","hex":"#fff08a"}],"frames":[{"name":"Gold Coin 001","durationMs":250,"patch":[{"op":"set","x":14,"y":14,"colorId":"coin_gold"},{"op":"set","x":15,"y":14,"colorId":"coin_highlight"},{"op":"set","x":16,"y":14,"colorId":"coin_gold"},{"op":"set","x":14,"y":15,"colorId":"coin_gold"},{"op":"set","x":15,"y":15,"colorId":"coin_highlight"},{"op":"set","x":16,"y":15,"colorId":"coin_gold"},{"op":"set","x":14,"y":16,"colorId":"coin_gold"},{"op":"set","x":15,"y":16,"colorId":"coin_gold"}]},{"name":"Gold Coin 002","durationMs":250,"patch":[{"op":"set","x":15,"y":13,"colorId":"coin_gold"},{"op":"set","x":15,"y":14,"colorId":"coin_highlight"},{"op":"set","x":15,"y":15,"colorId":"coin_gold"},{"op":"set","x":15,"y":16,"colorId":"coin_gold"},{"op":"set","x":16,"y":13,"colorId":"coin_gold"},{"op":"set","x":16,"y":14,"colorId":"coin_gold"},{"op":"set","x":16,"y":15,"colorId":"coin_gold"},{"op":"set","x":16,"y":16,"colorId":"coin_gold"}]}]}',
         }),
       } as Response),
     )
@@ -397,7 +397,11 @@ describe('parseOllamaPatchResponse', () => {
     })
 
     expect(draft.animationName).toBe('Gold Coin')
-    expect(draft.frames).toHaveLength(4)
+    expect(draft.paletteAdditions).toEqual([
+      { id: 'coin_gold', name: 'Coin Gold', hex: '#d99a1e' },
+      { id: 'coin_highlight', name: 'Coin Highlight', hex: '#fff08a' },
+    ])
+    expect(draft.frames).toHaveLength(2)
     expect(draft.frames.every((frame) => frame.patch.length >= 8)).toBe(true)
     expect(draft.frames.every((frame) => frame.patch.every((operation) => operation.op === 'set'))).toBe(true)
   })

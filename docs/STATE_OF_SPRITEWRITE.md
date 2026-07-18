@@ -44,7 +44,8 @@ The app has no backend, database, auth, cloud sync, paid provider API, Cuddler d
 - SpriteWrite prompt-intent padding converts plain user requests into constrained provider jobs: selected-frame edit, single-frame draft, 3-6 frame animation draft, or multi-row animation variation set.
 - AI Assist prompt context controls let the user set output intent (`Auto`, `Static frame / tile`, `Animated row`) and view angle (`Auto`, `Side-scroller`, `Top-down`, `2.5D / three-quarter`). SpriteWrite injects those constraints into Ollama prompt padding so static tiles, wall/ground pieces, backgrounds, and animated sprites can carry different view assumptions.
 - Ollama broad animation prompts can request a first-pass structured animation draft made of editable frame operation arrays.
-- Ollama recipe prompts can request compact structured parameters for observed stable families: rotating coin, grass tile variation sets, character/hero idle, and tentacle creature variation sets. SpriteWrite expands those recipes into validated editable cell patches; Ollama still does not return opaque raster images.
+- Ollama animation drafts can include `paletteAdditions`; SpriteWrite validates and merges those colors before validating frame operations. This lets Ollama propose asset-appropriate colors without SpriteWrite turning into a hard-coded generator for each asset type.
+- Ollama recipe prompts can request compact structured parameters for observed stable structural families: grass tile variation sets, character/hero idle, and tentacle creature variation sets. SpriteWrite expands those recipes into validated editable cell patches; Ollama still does not return opaque raster images.
 - Provider status messages can expand into details for Ollama/provider diagnostics, including padded prompt context, model/base URL, validation errors, and attempted edit/draft JSON when available.
 - Ollama animation-draft prompts explicitly forbid rectangle-style `width`/`height` operation fields and tiny marker patches; strict validation still rejects bad model output rather than silently accepting it.
 - Ollama generate requests use deterministic temperature 0 and `think: false`. Selected-frame edit requests use JSON Schema structured output. Animation drafts use lighter JSON mode plus SpriteWrite validation because strict multi-frame operation-array schemas can stall local qwen models. Empty `{}` animation responses are reported as schema-ignored/thinking-mode output.
@@ -332,9 +333,10 @@ Covered:
 - SpriteWrite prompt-intent tests for static output and view-angle context padding
 - Ollama selected-frame response-shape tests for common patch wrapper aliases and animation-draft/wrong-shape errors
 - Ollama request-body tests for JSON Schema selected-frame patch calls, JSON-mode animation draft calls, `think: false`, and empty-object animation draft errors
-- live Ollama integration coverage that calls local `qwen3:14b` when Ollama and that model are available; current live checks cover coin, grass variation sets, hero idle/cape, and tentacle creature variations
+- live Ollama integration coverage that calls local `qwen3:14b` when Ollama and that model are available; current live checks cover a direct coin draft, grass variation sets, hero idle/cape, and tentacle creature variations
 - Ollama animation-draft parsing/provider tests with stubbed fetch
-- Ollama recipe expansion tests for rotating coin, grass variation sets, character idle, and tentacle creature variation sets
+- Ollama recipe expansion tests for grass variation sets, character idle, and tentacle creature variation sets
+- provider and app smoke tests proving animation drafts can carry `paletteAdditions` and that SpriteWrite merges them before validating frame cells
 - prompt-intent tests for terse creative requests such as "hero idle" and "tentacle monster, 3 variations"
 - app smoke test for broad Ollama character animation draft creating editable frames
 - app smoke test proving a plain "4-6 frame gold coin spinning animation" request is padded into a 6-frame animation draft before Ollama sees it

@@ -54,13 +54,14 @@ Verified from repository docs and source inspection on 2026-07-01:
 - SpriteWrite now pads plain asset prompts before they reach Ollama: small edits route to selected-frame edits, static asset requests route to larger single-frame drafts, and multi-frame/animation requests route to 3-6 frame animation drafts.
 - AI Assist now includes prompt context controls for output intent (`Auto`, `Static frame / tile`, `Animated row`) and view angle (`Auto`, `Side-scroller`, `Top-down`, `2.5D / three-quarter`). These context values are injected into SpriteWrite's padded Ollama instructions so static tile/wall/ground/background-style requests can carry game-view assumptions without the user hand-writing prompt boilerplate.
 - Ollama broad animation prompts route to a first-pass structured animation-draft path: editable frame patches are requested, validated, checked for basic coherence, and committed only if valid.
-- Ollama broad asset prompts now have a recipe rail for observed qwen-stable cases. Prompts such as rotating gold coin, short grass tile variations, hero idle/cape, and tentacle monster variations can ask Ollama for compact recipe parameters; SpriteWrite deterministically expands those parameters into editable cell patches and animation rows.
-- Live local `qwen3:14b` probes on 2026-07-18 showed compact recipe prompts returning usable JSON quickly for 4-frame rotating gold coin, 4 grass tile variations, hero idle/cape, and 3 tentacle creature variations. Raw all-cell prompts remain more fragile and slower.
+- Ollama broad animation drafts can now include structured `paletteAdditions`. SpriteWrite validates and merges those palette colors before validating frame operations, so a provider can propose appropriate asset colors, such as gold/orange coin colors, without SpriteWrite hard-coding the finished asset art.
+- Ollama broad asset prompts still have a recipe rail for a few observed qwen-stable structural cases such as short grass tile variations, hero idle/cape, and tentacle monster variations. Ordinary prompts such as rotating gold coin should remain provider-drafted editable frames with optional palette additions, not a SpriteWrite-owned coin generator.
+- Live local `qwen3:14b` probes on 2026-07-18 showed compact recipe prompts returning usable JSON quickly for grass tile variations, hero idle/cape, and tentacle creature variations. Raw all-cell prompts remain more fragile and slower.
 - Provider failures and rejected Ollama drafts now expose an expandable details payload with the padded prompt, model/base URL context, validation errors, and the attempted patch/draft JSON where available.
 - Ollama requests now show attempt number and elapsed time in status/details, and app coverage verifies a second click after a rejected animation draft sends a second provider request.
 - Ollama animation-draft prompts now explicitly forbid rectangle-style `width`/`height` operation fields and tiny marker patches after observed `llama3.2:3b` output violated the cell-operation contract.
 - Ollama generate calls set `think: false` and temperature 0 after observed `qwen3:14b` output returned `{}` when thinking was left enabled/implicit. Selected-frame patch calls use JSON Schema structured output; animation drafts use lighter JSON mode plus SpriteWrite validation because multi-frame operation-array schemas can stall local qwen.
-- `npm test -- --run src/providers/ollamaPatchProvider.test.ts` now includes live integration checks that call local `qwen3:14b` when Ollama is running and that model is installed. Current live checks cover coin, grass variation sets, hero idle/cape, and tentacle creature variations. If qwen has stuck work from aborted requests, unloading the model with Ollama `keep_alive: 0` can clear the queue.
+- `npm test -- --run src/providers/ollamaPatchProvider.test.ts` now includes live integration checks that call local `qwen3:14b` when Ollama is running and that model is installed. Current live checks cover a direct coin draft plus grass variation sets, hero idle/cape, and tentacle creature variations. If qwen has stuck work from aborted requests, unloading the model with Ollama `keep_alive: 0` can clear the queue.
 - User-facing AI proposals are edits or drafts backed by JSON operations with validation, preview, include/exclude toggles, removal, apply, and reject.
 - Project JSON import/export exists.
 - PNG exports and sprite sheet metadata are derived through tested layout/raster/canvas export utilities.
@@ -77,7 +78,7 @@ Known project commands from `package.json`:
 - `npm run lint`
 - `npm run typecheck`
 
-Latest verified run on 2026-07-18: `npm run build`, `npm test -- --run`, `npm run lint`, and `npm run typecheck` passed after adding AI Assist output/view prompt context controls. The full test suite includes live local `qwen3:14b` integration checks when available. The test suite has 9 test files and 215 tests.
+Latest verified run on 2026-07-18: `npm run build`, `npm test -- --run`, `npm run lint`, and `npm run typecheck` passed after shifting coin-style drafts away from SpriteWrite-owned recipe art and adding provider-suggested `paletteAdditions` validation/merge. The full test suite includes live local `qwen3:14b` integration checks when available. The test suite has 9 test files and 215 tests.
 
 ## Current Risks And Uncertainty
 

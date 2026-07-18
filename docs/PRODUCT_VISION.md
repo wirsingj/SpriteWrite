@@ -82,7 +82,7 @@ AI assistance should be designed around focused operations:
 - apply a described patch only to selected cells or layers
 - evaluate continuity between frames
 
-Prefer structured, reviewable results: editable pixel grids, palette changes, frame patches, duplicated-and-modified frames, or explicit layer operations.
+Prefer structured, reviewable results: editable pixel grids, palette changes, frame patches, duplicated-and-modified frames, or explicit layer operations. If an asset needs colors outside the current palette, the provider should propose explicit palette additions rather than SpriteWrite hard-coding finished art for that asset type.
 
 AI output must never become an irreversible replacement. The user must be able to preview, accept, reject, undo, and manually edit every result.
 

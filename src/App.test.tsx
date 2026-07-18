@@ -471,19 +471,25 @@ describe('App shell', () => {
       const right = frameIndex % 3 === 1 ? 16 : 17
       return [
         { op: 'set', x: left, y: 14, colorId: 'ink' },
-        { op: 'set', x: left + 1, y: 14, colorId: 'accent' },
+        { op: 'set', x: left + 1, y: 14, colorId: 'coin_gold' },
         { op: 'set', x: right, y: 14, colorId: 'ink' },
-        { op: 'set', x: left, y: 15, colorId: 'accent' },
-        { op: 'set', x: left + 1, y: 15, colorId: 'white' },
-        { op: 'set', x: right, y: 15, colorId: 'accent' },
+        { op: 'set', x: left, y: 15, colorId: 'coin_gold' },
+        { op: 'set', x: left + 1, y: 15, colorId: 'coin_highlight' },
+        { op: 'set', x: right, y: 15, colorId: 'coin_light' },
         { op: 'set', x: left, y: 16, colorId: 'ink' },
-        { op: 'set', x: left + 1, y: 16, colorId: 'shadow' },
+        { op: 'set', x: left + 1, y: 16, colorId: 'coin_shadow' },
         { op: 'set', x: right, y: 16, colorId: 'ink' },
       ]
     }
     const draft = {
       animationName: 'Coin Spin',
       fps: 8,
+      paletteAdditions: [
+        { id: 'coin_shadow', name: 'Coin Shadow', hex: '#8f5a14' },
+        { id: 'coin_gold', name: 'Coin Gold', hex: '#d99a1e' },
+        { id: 'coin_light', name: 'Coin Light', hex: '#f6c945' },
+        { id: 'coin_highlight', name: 'Coin Highlight', hex: '#fff08a' },
+      ],
       frames: Array.from({ length: 6 }, (_, index) => ({
         name: `Coin Spin ${index + 1}`,
         durationMs: 125,
@@ -516,11 +522,18 @@ describe('App shell', () => {
     const { capturedBlob } = setupDownloadCapture()
     clickButton('Export Project JSON')
     const exported = JSON.parse((await capturedBlob.current?.text()) ?? '{}') as {
+      palette: Array<{ id: string; hex: string }>
       animations: Array<{ id: string; name: string; frameIds: string[] }>
+      frames: Array<{ id: string; layers: Array<{ cells: Record<string, string> }> }>
     }
     const idle = exported.animations.find((animation) => animation.id === 'idle')
     expect(idle).toMatchObject({ name: 'Coin Spin' })
     expect(idle?.frameIds).toHaveLength(6)
+    expect(exported.palette.map((color) => color.id)).toEqual(
+      expect.arrayContaining(['coin_shadow', 'coin_gold', 'coin_light', 'coin_highlight']),
+    )
+    const firstCoinFrame = exported.frames.find((frame) => frame.id === idle?.frameIds[0])
+    expect(Object.values(firstCoinFrame?.layers[0].cells ?? {})).toContain('coin_gold')
   })
 
   it('applies Ollama grass variation recipes as multiple editable animation rows', async () => {

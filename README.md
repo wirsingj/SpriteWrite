@@ -235,6 +235,7 @@ The AI Assistant is the first AI-shaped workflow, but it does not require AI.
 - `Ollama experimental` can call a local Ollama server and expects JSON cell operations only.
 - Output context lets SpriteWrite frame the request as auto, static frame/tile, or animated row.
 - View context lets SpriteWrite add side-scroller, top-down, or 2.5D/three-quarter guidance before the prompt reaches Ollama.
+- Animation drafts may include explicit palette additions; SpriteWrite validates and merges them before validating frame cells.
 - Broad character/animation prompts can request a 3-6 frame draft object containing per-frame patch arrays.
 - Proposed selected-frame edits are shown as JSON and previewed on the grid only when valid.
 - Edits and drafts never apply automatically.
