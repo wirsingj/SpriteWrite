@@ -33,7 +33,48 @@ Windows convenience launcher:
 Run SpriteWrite.bat
 ```
 
+Background launch option (no attached terminal):
+
+```text
+Run SpriteWrite detached.bat
+```
+
+For Bash-first use, you can run:
+
+```bash
+npm run dev:bash
+```
+
+You can pass a port positionally:
+
+```bash
+npm run dev:bash -- 5188
+```
+
 The launcher starts the local Vite dev server.
+The launcher accepts an optional port argument:
+
+```text
+Run SpriteWrite.bat 5178
+```
+
+The background launcher also accepts a port argument:
+
+```text
+Run SpriteWrite detached.bat 5178
+```
+
+You can also set a default port in the current shell:
+
+```bash
+export SPRITEWRITE_PORT=5178  # Git Bash
+npm run dev
+```
+
+```bat
+set SPRITEWRITE_PORT=5178  # cmd
+npm run dev
+```
 
 ## Standard Checks
 
@@ -49,6 +90,7 @@ npm run typecheck
 The package scripts are:
 
 - `npm run dev`
+- `npm run dev:bash` (Bash-first launch script)
 - `npm run build`
 - `npm run typecheck`
 - `npm run lint`
@@ -100,11 +142,11 @@ This is different from updating project memory after ordinary SpriteWrite work. 
 
 If the local browser cannot connect to Vite, restart it from the repo root:
 
-```powershell
-npm run dev
+```bash
+npm run dev:bash
 ```
 
-If port `5173` is occupied, identify the listener before stopping anything. Avoid killing unrelated processes blindly.
+If the configured default port is occupied, identify the listener before stopping anything. Avoid killing unrelated processes blindly.
 
 If imports fail, validate the project JSON shape through `validateProject()` in `src/domain/spriteData.ts` and compare against `SpriteProject` in `src/domain/spriteTypes.ts`.
 
@@ -113,6 +155,24 @@ If exports look wrong, check the pure renderer first:
 - `createSpriteSheetLayout()` in `src/domain/exportPlanning.ts`
 - `renderFrameToRgbaBuffer()` and `renderAnimationToRgbaBuffer()` in `src/domain/exportRaster.ts`
 - canvas wrapper in `src/utils/canvasExport.ts`
+
+If you get repeated overlay errors or suspect stale dev sessions, run:
+
+```text
+Stop SpriteWrite.bat
+```
+
+To stop only one port:
+
+```text
+Stop SpriteWrite.bat 5173
+```
+
+Use this flow for reliable startup recovery:
+
+1. `Stop SpriteWrite.bat` (or `Stop SpriteWrite.bat <port>`)
+2. `Run SpriteWrite.bat <port>` (or `Run SpriteWrite detached.bat <port>` if you want no attached terminal)
+3. Refresh browser (hard refresh only if Vite cache clearly stale).
 
 ## Maintenance Rules
 

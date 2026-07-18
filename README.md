@@ -129,7 +129,79 @@ npm run dev
 
 Then open the local URL printed by Vite.
 
-On Windows, you can also double-click `Run SpriteWrite.bat` from the repo root. It starts Vite on `http://127.0.0.1:5173` and opens that URL in your browser. Leave the terminal window open while using the app, and press `Ctrl+C` in that window to stop it.
+If you're in Git Bash and want a simple, repeatable startup command:
+
+```bash
+./start-spritewrite.sh
+```
+
+Optional custom port:
+
+```bash
+./start-spritewrite.sh 5178
+```
+
+To force a different port:
+
+```bash
+# Git Bash env-first
+export SPRITEWRITE_PORT=5178
+npm run dev
+```
+
+```bash
+# Quick one-shot in Git Bash
+SPRITEWRITE_PORT=5178 npm run dev
+```
+
+```bat
+# CMD
+set SPRITEWRITE_PORT=5178
+npm run dev
+```
+
+You can also pass the port when launching from the batch file:
+
+```text
+Run SpriteWrite.bat 5178
+```
+
+In Git Bash, use:
+
+```bash
+./Run\ SpriteWrite.bat 5178
+```
+
+If no port is provided, `Run SpriteWrite.bat` uses the default `5173` (or `SPRITEWRITE_PORT` when set).
+
+On Windows, you can also double-click `Run SpriteWrite.bat` from the repo root. It opens the chosen port in your browser, starts Vite on that port, and stays attached to this terminal. Leave the terminal window open while using the app, and press `Ctrl+C` in that window to stop it.
+
+If you prefer to skip the terminal window, use:
+
+```text
+Run SpriteWrite detached.bat 5173
+```
+
+This launches Vite in the background and writes logs to `spritewrite-dev.log`.
+It does not auto-open a browser window.
+
+If the app starts acting up, use this cleanup command before restarting:
+
+```text
+Stop SpriteWrite.bat
+```
+
+You can also stop only one port:
+
+```text
+Stop SpriteWrite.bat 5173
+```
+
+If you are in Git Bash and don't want env vars, you can also run:
+
+```bash
+npm run dev -- --host 127.0.0.1 --port 5178 --strictPort
+```
 
 Optional desktop shortcut: right-click `Run SpriteWrite.bat`, choose `Show more options`, then `Send to > Desktop (create shortcut)`. This is optional and local to your machine; the repo does not require or create a desktop shortcut.
 
