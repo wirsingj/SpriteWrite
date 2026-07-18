@@ -47,7 +47,7 @@ SpriteWrite should support multiple pixel-art resolutions and visual styles. Avo
 - Neutral blank-project palette for non-ooze assets, with slime colors limited to the ooze reference template.
 - Sparse cell storage where transparent cells are omitted.
 - Manual paint and erase tools.
-- Browser-local configurable paint/erase shortcut keys.
+- Fixed paint/erase keyboard shortcuts.
 - Click and drag painting.
 - Layer panel with add, delete, reorder, select, rename, visibility, PNG export inclusion, lock/editable, opacity, normal/multiply/screen blend mode controls, and simple art/guide/shadow/highlight presets.
 - Top atlas strip with frame add, duplicate, delete, selected-frame metadata, notes/tags, sheet order, and at-least-one-frame safety.
@@ -57,16 +57,16 @@ SpriteWrite should support multiple pixel-art resolutions and visual styles. Avo
 - Atlas overview that shows animation/static rows below the detailed cell editor, with click selection, shift/ctrl/cmd multi-select, selected-frame duplicate/delete, selected-frame duration/notes/tags editing, and drag reorder within a row.
 - Draggable bottom atlas height and right preview/inspector width handles for fitting the workspace to the current asset.
 - Center workspace toggle for detailed frame editing or full sprite sheet view; clicking a frame in the full-sheet view returns to editing.
-- Focused AI Assist surface for Mock/Ollama structured patch proposals against editable grid data, with local Ollama model refresh/download controls.
+- Focused AI Assist surface for Ollama/Mock structured edit proposals against editable grid data, with startup local Ollama model refresh plus manual refresh/download controls.
 - First-pass Ollama animation-draft flow for broad prompts such as "hero wearing a cape, standing animation"; successful drafts become editable frame rows rather than opaque images.
 - Animation preview with adjustable FPS, optional solid preview background color, and crisp nearest-neighbor rendering.
 - Basic previous-frame onion skin.
 - Palette editing for adding colors, reordering colors, editing selected-color name/hex, and deleting unused colors.
 - Keyboard shortcuts plus a searchable command palette from the editor header or `Ctrl+K`.
-- Optional Patch Assistant with Mock provider and experimental Ollama provider.
-- Proposed patch JSON preview before apply.
-- Proposed patch diff summary with per-operation include/exclude and removal.
-- Validation errors for bad patches.
+- Optional AI Assistant with experimental Ollama provider and deterministic Mock provider.
+- Proposed edit JSON preview before apply.
+- Proposed edit diff summary with per-operation include/exclude and removal.
+- Validation errors for bad edits.
 - Export project JSON.
 - Import project JSON with strong validation before replacing the current project.
 - Home/start screen with New Project, templates, import, and current project entry.
@@ -86,7 +86,7 @@ SpriteWrite should support multiple pixel-art resolutions and visual styles. Avo
 1. Start on the SpriteWrite home screen.
 2. Choose New Project, New From Template, Import Project JSON, or Open Current Project.
 3. Enter the editor with a valid project.
-4. Paint from scratch on the central canvas, or open AI Assist for a structured patch proposal.
+4. Paint from scratch on the central canvas, or open AI Assist for a structured edit proposal.
 5. Inspect the atlas rows in the bottom filmstrip.
 6. Click the static frame or animation row frame you want to edit.
 7. Shift-click or ctrl/cmd-click row frames for multi-selection, duplicate or delete selected frames, set selected-frame duration/notes/tags, or drag a frame to reorder the row.
@@ -99,11 +99,11 @@ SpriteWrite should support multiple pixel-art resolutions and visual styles. Avo
 14. Add or duplicate frames.
 15. Use onion skin to compare against the previous frame.
 16. Preview the current frame or animation.
-17. Optionally refresh/download a local Ollama model and ask for a Mock or experimental Ollama patch.
-18. Use small edit prompts for selected-frame patches, or broad character/animation prompts for a structured frame-row draft.
-19. Inspect valid proposed patch JSON and grid overlay.
-20. Exclude or remove unwanted selected-frame patch operations if needed.
-21. Apply or reject the patch or draft.
+17. Use the default Ollama local provider, optionally refresh/download a local model, or switch to the Mock local provider.
+18. Use small edit prompts for selected-frame edits, or broad character/animation prompts for a structured frame-row draft.
+19. Inspect valid proposed edit JSON and grid overlay.
+20. Exclude or remove unwanted selected-frame edit operations if needed.
+21. Apply or reject the edit or draft.
 22. Undo or redo as needed.
 23. Export project JSON, PNG frames, animation strips, full sprite sheets, or full sprite sheet metadata.
 
@@ -224,15 +224,16 @@ Patch operations are small, inspectable edits:
 
 Validation rejects out-of-bounds cells, unknown color IDs, invalid operation names, malformed coordinates, extra fields such as dimension changes, and missing animations, frames, or layers.
 
-## Patch Assistant
+## AI Assistant
 
-The Patch Assistant is the first AI-shaped workflow, but it does not require AI.
+The AI Assistant is the first AI-shaped workflow, but it does not require AI.
 
-- `Mock` is the default provider and returns deterministic local patch operations.
-- `Ollama experimental` can call a local Ollama server and expects JSON patch operations only.
+- `Ollama local` is the default provider. SpriteWrite auto-refreshes local models on browser startup when Ollama is reachable.
+- `Mock local` returns deterministic local cell operations when you want a no-provider test path.
+- `Ollama experimental` can call a local Ollama server and expects JSON cell operations only.
 - Broad character/animation prompts can request a 3-6 frame draft object containing per-frame patch arrays.
-- Proposed selected-frame patches are shown as JSON and previewed on the grid only when valid.
-- Patches never apply automatically.
+- Proposed selected-frame edits are shown as JSON and previewed on the grid only when valid.
+- Edits and drafts never apply automatically.
 - Bad provider output is expected and should be caught by validation.
 - Vision-oriented models such as `llava` may be available in Ollama, but text/instruction or code-style models are usually better at strict JSON patch output. When Ollama reports model capabilities, SpriteWrite refresh prefers a non-vision model if one is available.
 
@@ -242,7 +243,7 @@ Ollama is the likely first real local AI provider. In SpriteWrite, Ollama is tre
 
 It should receive selected project, frame, layer, palette, current cells, onion context, neighboring frames, frame intent, fixed dimensions, palette constraints, and transformation constraints. It should return structured editable results: JSON patch operations, validated frame drafts, palette suggestions, or explicit layer operations. It must not return image files, base64, markdown as the primary output, prose as the primary output, or regenerated raster sprite sheets.
 
-The current Ollama provider is intentionally experimental. It can refresh local models from Ollama, pull/download a named model, ask the selected model for structured patch JSON against the selected frame/layer, and route broad whole-asset prompts to a first-pass structured animation draft. Drafts are still editable frame patches, not image blobs. Quality depends heavily on the selected local model, and bad JSON or incoherent drafts are rejected without mutating the project.
+The current Ollama provider is intentionally experimental. It auto-refreshes local models on startup, can manually refresh local models from Ollama, pull/download a named model, ask the selected model for structured edit JSON against the selected frame/layer, and route broad whole-asset prompts to a first-pass structured animation draft. Drafts are still editable frame operations, not image blobs. Quality depends heavily on the selected local model, and bad JSON or incoherent drafts are rejected without mutating the project.
 
 ## Future Cuddler And OllamaSaddle Plan
 
@@ -260,8 +261,8 @@ This repo does not implement or import Cuddler or OllamaSaddle.
 - Undo/redo is snapshot-based and intentionally simple.
 - Command palette shortcuts are not user-configurable yet.
 - No PNG binary/golden tests yet; pure RGBA buffer tests cover exported pixels and jsdom tests cover the canvas PNG wrapper before real browser download checks exist.
-- Patch diff supports side-by-side current/proposed previews, changed-cell highlights, summary, operation grouping, per-operation include/exclude, and removal.
-- Paint/erase shortcut keys are persisted as browser-local preferences; non-tool shortcuts are fixed.
+- Edit diff supports side-by-side current/proposed previews, changed-cell highlights, summary, operation grouping, per-operation include/exclude, and removal.
+- Keyboard shortcuts are fixed for now; the old paint/erase shortcut settings panel was removed to reduce sidebar clutter.
 - No layer folders, silhouette locks, anchor locks, or engine-specific export yet.
 - Ollama support is experimental and will fail gracefully if Ollama is not running or returns invalid output.
 
@@ -269,8 +270,8 @@ This repo does not implement or import Cuddler or OllamaSaddle.
 
 Do not implement these until the core editor earns it:
 
-- Real Ollama patch generation improvements.
-- Patch diff visualization.
+- Real Ollama edit/draft generation improvements.
+- Edit diff visualization.
 - Palette extraction.
 - Silhouette locks.
 - Anchor locks.

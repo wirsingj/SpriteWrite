@@ -305,7 +305,7 @@ describe('App shell', () => {
     expect(fetch).toHaveBeenCalledWith('http://localhost:11434/api/tags')
   })
 
-  it('warns when a vision-oriented Ollama model is selected for structured patches', () => {
+  it('warns when a vision-oriented Ollama model is selected for structured edits', () => {
     act(() => {
       root.render(<App />)
     })
@@ -342,7 +342,7 @@ describe('App shell', () => {
 
     await clickButtonAsync('Download Model')
 
-    expect(container.textContent).toContain('Downloaded phi4-mini. Ready for structured patch requests.')
+    expect(container.textContent).toContain('Downloaded phi4-mini. Ready for structured edit requests.')
     expect(fetch).toHaveBeenCalledWith(
       'http://localhost:11434/api/pull',
       expect.objectContaining({
@@ -352,7 +352,7 @@ describe('App shell', () => {
     )
   })
 
-  it('asks Ollama from the main ask panel and shows a proposed patch message', async () => {
+  it('asks Ollama from the main ask panel and shows a proposed edit message', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
@@ -370,7 +370,7 @@ describe('App shell', () => {
     clickButton('New Project')
     await clickButtonAsync('Ask Ollama')
 
-    expect(container.textContent).toContain('Ollama proposed 1 operation. Review before applying.')
+    expect(container.textContent).toContain('Ollama proposed 1 change. Review before applying.')
     expect(container.textContent).toContain('1/1 enabled')
   })
 
@@ -731,7 +731,7 @@ describe('App shell', () => {
     })
 
     clickButton('New Project')
-    expect(container.textContent).toContain('Patch Assistant')
+    expect(container.textContent).toContain('AI Assistant')
 
     clickButton('Home')
 
@@ -741,7 +741,7 @@ describe('App shell', () => {
 
     clickButton('Open Current Project')
 
-    expect(container.textContent).toContain('Patch Assistant')
+    expect(container.textContent).toContain('AI Assistant')
     expect(container.textContent).toContain('Saved as Project JSON')
   })
 
@@ -872,60 +872,30 @@ describe('App shell', () => {
     expect(container.textContent).toContain('Ink')
   })
 
-  it('allows paint and erase shortcut keys to be changed', () => {
+  it('does not show the old shortcut settings panel in the drawing dock', () => {
     act(() => {
       root.render(<App />)
     })
 
     clickButton('New Project')
 
-    act(() => {
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'e' }))
-    })
-    expect(container.textContent).toContain('Eraser')
+    expect(container.querySelector('.shortcut-settings')).toBeNull()
+    expect(container.textContent).not.toContain('Reset Shortcuts')
+  })
 
-    const shortcutInputs = getRequiredElement('.shortcut-settings').querySelectorAll('input')
-    setInputValue(shortcutInputs[0], 'b')
-
-    act(() => {
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'p' }))
-    })
-    expect(container.textContent).toContain('Eraser')
-
-    act(() => {
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b' }))
-    })
-    expect(container.textContent).toContain('Ink')
-    expect(container.textContent).toContain('Updated paint shortcut to "B".')
-
-    act(() => {
-      root.unmount()
-    })
-    root = createRoot(container)
+  it('defaults the AI provider to local Ollama', () => {
     act(() => {
       root.render(<App />)
     })
+
     clickButton('New Project')
 
-    act(() => {
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'e' }))
-    })
-    expect(container.textContent).toContain('Eraser')
+    const providerSelect = Array.from(container.querySelectorAll<HTMLSelectElement>('select')).find((select) =>
+      Array.from(select.options).some((option) => option.value === 'ollama'),
+    )
 
-    act(() => {
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b' }))
-    })
-    expect(container.textContent).toContain('Ink')
-
-    clickButton('Reset Shortcuts')
-    act(() => {
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'e' }))
-    })
-    expect(container.textContent).toContain('Eraser')
-    act(() => {
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'p' }))
-    })
-    expect(container.textContent).toContain('Ink')
+    expect(providerSelect?.value).toBe('ollama')
+    expect(container.textContent).toContain('Ollama local')
   })
 
   it('does not run editor shortcuts while typing in fields', () => {
@@ -1140,8 +1110,8 @@ describe('App shell', () => {
     })
 
     clickButton('New Project')
-    await clickButtonAsync('Generate Mock Patch')
-    clickButton('Apply Patch')
+    await clickButtonAsync('Generate Mock Edit')
+    clickButton('Apply Edit')
 
     const afterApply = setupDownloadCapture()
     clickButton('Export Project JSON')
@@ -1163,16 +1133,16 @@ describe('App shell', () => {
     expect(Object.keys(undoneProject.frames[0].layers[0].cells)).toHaveLength(0)
   })
 
-  it('rejects a proposed patch without mutating the project', async () => {
+  it('rejects a proposed edit without mutating the project', async () => {
     act(() => {
       root.render(<App />)
     })
 
     clickButton('New Project')
-    await clickButtonAsync('Generate Mock Patch')
+    await clickButtonAsync('Generate Mock Edit')
     expect(container.textContent).toContain('5/5 enabled')
 
-    clickButton('Reject Patch')
+    clickButton('Reject Edit')
 
     const afterReject = setupDownloadCapture()
     clickButton('Export Project JSON')
@@ -1180,7 +1150,7 @@ describe('App shell', () => {
       frames: Array<{ layers: Array<{ id: string; cells: Record<string, string> }> }>
     }
     expect(Object.keys(exportedProject.frames[0].layers[0].cells)).toHaveLength(0)
-    expect(container.textContent).toContain('Patch rejected.')
+    expect(container.textContent).toContain('Edit rejected.')
   })
   it('undoes frame add operations from the editor', () => {
     act(() => {
@@ -1778,17 +1748,17 @@ describe('App shell', () => {
     expect(capturedBlob.current?.type).toBe('image/png')
   })
 
-  it('can exclude a proposed patch operation before apply', async () => {
+  it('can exclude a proposed edit operation before apply', async () => {
     act(() => {
       root.render(<App />)
     })
 
     clickButton('New Project')
-    await clickButtonAsync('Generate Mock Patch')
+    await clickButtonAsync('Generate Mock Edit')
 
     expect(container.textContent).toContain('5/5 enabled')
     expect(container.textContent).toContain('Current frame')
-    expect(container.textContent).toContain('Proposed patch')
+    expect(container.textContent).toContain('Proposed edit')
     expect(container.textContent).toContain('Cells 5')
     expect(container.textContent).toContain('Bounds')
     expect(container.textContent).toContain('ink 5')
@@ -1803,13 +1773,13 @@ describe('App shell', () => {
     expect(container.querySelectorAll('.mini-highlight')).toHaveLength(8)
   })
 
-  it('can remove a proposed patch operation before apply', async () => {
+  it('can remove a proposed edit operation before apply', async () => {
     act(() => {
       root.render(<App />)
     })
 
     clickButton('New Project')
-    await clickButtonAsync('Generate Mock Patch')
+    await clickButtonAsync('Generate Mock Edit')
 
     clickButton('Remove')
 
@@ -1817,7 +1787,7 @@ describe('App shell', () => {
     expect(container.textContent).toContain('Cells 4')
     expect(container.querySelectorAll('.mini-highlight')).toHaveLength(8)
 
-    clickButton('Apply Patch')
+    clickButton('Apply Edit')
 
     const afterApply = setupDownloadCapture()
     clickButton('Export Project JSON')
@@ -1833,7 +1803,7 @@ describe('App shell', () => {
     })
 
     clickButton('New Project')
-    await clickButtonAsync('Generate Mock Patch')
+    await clickButtonAsync('Generate Mock Edit')
 
     for (let index = 0; index < 5; index += 1) {
       clickButton('Exclude')
@@ -1841,7 +1811,7 @@ describe('App shell', () => {
 
     expect(container.textContent).toContain('0/5 enabled')
     const applyButton = Array.from(container.querySelectorAll('button')).find(
-      (button) => button.textContent?.trim() === 'Apply Patch',
+      (button) => button.textContent?.trim() === 'Apply Edit',
     )
     expect(applyButton?.disabled).toBe(true)
 
@@ -1853,9 +1823,9 @@ describe('App shell', () => {
       throw new Error('Missing command palette search input.')
     }
 
-    setInputValue(commandSearch, 'apply proposed patch')
+    setInputValue(commandSearch, 'apply proposed edit')
     const commandButton = Array.from(container.querySelectorAll<HTMLButtonElement>('.command-item')).find(
-      (button) => button.textContent?.includes('Apply proposed patch'),
+      (button) => button.textContent?.includes('Apply proposed edit'),
     )
     expect(commandButton?.disabled).toBe(true)
 
@@ -1870,7 +1840,7 @@ describe('App shell', () => {
     }
     expect(Object.keys(exportedProject.frames[0].layers[0].cells)).toHaveLength(0)
   })
-  it('clears stale proposed patches after a provider failure', async () => {
+  it('clears stale proposed edits after a provider failure', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
@@ -1885,7 +1855,7 @@ describe('App shell', () => {
     })
 
     clickButton('New Project')
-    await clickButtonAsync('Generate Mock Patch')
+    await clickButtonAsync('Generate Mock Edit')
     expect(container.textContent).toContain('5/5 enabled')
 
     const providerSelect = Array.from(container.querySelectorAll('select')).find((select) =>
@@ -1905,7 +1875,7 @@ describe('App shell', () => {
     expect(container.textContent).toContain('Ollama returned 503 Unavailable')
     expect(container.textContent).not.toContain('5/5 enabled')
 
-    clickButton('Apply Patch')
+    clickButton('Apply Edit')
 
     const afterFailure = setupDownloadCapture()
     clickButton('Export Project JSON')

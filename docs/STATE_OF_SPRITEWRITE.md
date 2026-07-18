@@ -40,15 +40,16 @@ The app has no backend, database, auth, cloud sync, paid provider API, Cuddler d
 - Draggable bottom atlas height and right preview/inspector width handles.
 - Preview panel can switch from checkerboard transparency view to a display-only solid background color; exports remain transparent according to export settings.
 - Focused export menu in the header for Project JSON, current frame PNG, current animation strip PNG, full sprite sheet PNG, full sprite sheet PNG plus metadata JSON, and export-plan settings.
-- Collapsed AI Assist surface for Mock/Ollama structured patch proposals against editable grid data.
-- SpriteWrite prompt-intent padding converts plain user requests into constrained provider jobs: selected-frame patch, single-frame draft, 3-6 frame animation draft, or multi-row animation variation set.
-- Ollama broad animation prompts can request a first-pass structured animation draft made of editable frame patch arrays.
+- Collapsed AI Assist surface for Mock/Ollama structured edit proposals against editable grid data.
+- SpriteWrite prompt-intent padding converts plain user requests into constrained provider jobs: selected-frame edit, single-frame draft, 3-6 frame animation draft, or multi-row animation variation set.
+- Ollama broad animation prompts can request a first-pass structured animation draft made of editable frame operation arrays.
 - Ollama recipe prompts can request compact structured parameters for observed stable families: rotating coin, grass tile variation sets, character/hero idle, and tentacle creature variation sets. SpriteWrite expands those recipes into validated editable cell patches; Ollama still does not return opaque raster images.
-- Provider status messages can expand into details for Ollama/provider diagnostics, including padded prompt context, model/base URL, validation errors, and attempted patch/draft JSON when available.
+- Provider status messages can expand into details for Ollama/provider diagnostics, including padded prompt context, model/base URL, validation errors, and attempted edit/draft JSON when available.
 - Ollama animation-draft prompts explicitly forbid rectangle-style `width`/`height` operation fields and tiny marker patches; strict validation still rejects bad model output rather than silently accepting it.
-- Ollama generate requests use deterministic temperature 0 and `think: false`. Selected-frame patch requests use JSON Schema structured output. Animation drafts use lighter JSON mode plus SpriteWrite validation because strict multi-frame operation-array schemas can stall local qwen models. Empty `{}` animation responses are reported as schema-ignored/thinking-mode output.
-- Invalid selected-frame patch proposals no longer draw canvas overlays until validation passes.
+- Ollama generate requests use deterministic temperature 0 and `think: false`. Selected-frame edit requests use JSON Schema structured output. Animation drafts use lighter JSON mode plus SpriteWrite validation because strict multi-frame operation-array schemas can stall local qwen models. Empty `{}` animation responses are reported as schema-ignored/thinking-mode output.
+- Invalid selected-frame edit proposals no longer draw canvas overlays until validation passes.
 - Vision-oriented Ollama model names such as `llava` show a suitability warning because strict JSON patch/draft generation usually works better with text/instruction or code-style models.
+- AI Assist defaults to Ollama local. In the real browser app, SpriteWrite auto-refreshes local Ollama models once on startup; manual model refresh remains available.
 - Main Ollama controls for base URL, local model refresh, installed-model selection, manual model-name input for custom/download names, model download/pull, and visible request status. Model refresh prefers a non-vision model when Ollama reports capabilities or `details.families` includes vision-oriented markers such as `clip`.
 - Atlas overview that shows animation/static rows as a bottom filmstrip attached to the detailed cell editor.
 - Atlas row frame controls support click selection, shift-click range selection, ctrl/cmd-click toggle selection, drag reorder within a row, selected-frame duplication, selected-frame deletion while preserving at least one frame, and selected-frame duration/notes/tags editing.
@@ -56,19 +57,18 @@ The app has no backend, database, auth, cloud sync, paid provider API, Cuddler d
 - Permanent four-step onboarding banner was removed from the editor; current workflow hierarchy is expressed through layout rather than instructional cards.
 - Previous-frame onion skin as visual guidance only.
 - Keyboard shortcuts for paint, erase, frame navigation, undo, redo, and preview play/pause.
-- Configurable paint/erase shortcut keys in the editor, persisted as a browser-local preference.
 - Discoverable command palette opened from the editor header or `Ctrl+K`.
 - Current-frame layer panel with layer selection, editing controls, visibility toggles, and PNG export inclusion toggles.
-- Patch Assistant with Mock provider and experimental Ollama provider.
-- Patch Assistant is presented as optional structured edit help so it does not compete with the manual static/animation/export workflow.
-- Proposed patch JSON preview.
-- Side-by-side current/proposed patch preview.
-- Highlighted changed-cell markers in current/proposed patch preview.
-- Proposed patch diff summary with set/clear counts, active operation count, changed-cell count, affected bounds, operation groups, and operation list.
-- Per-operation removal from proposed patches before apply.
-- Per-operation include/exclude toggles so only active patch operations preview and apply.
-- Patch validation error display.
-- Accept/reject patch workflow.
+- AI Assistant with Mock provider and experimental Ollama provider.
+- AI Assistant is presented as optional structured edit help so it does not compete with the manual static/animation/export workflow.
+- Proposed edit JSON preview.
+- Side-by-side current/proposed edit preview.
+- Highlighted changed-cell markers in current/proposed edit preview.
+- Proposed edit diff summary with set/clear counts, active operation count, changed-cell count, affected bounds, operation groups, and operation list.
+- Per-operation removal from proposed edits before apply.
+- Per-operation include/exclude toggles so only active edit operations preview and apply.
+- Edit validation error display.
+- Accept/reject edit workflow.
 - Project JSON export/import.
 - Unsaved editable-change indicator plus browser/project-replacement warnings.
 - Browser-local draft autosave for convenience recovery.
@@ -122,35 +122,35 @@ The app starts on a home screen with New Project, New From Template, Import Proj
 
 New projects are created from `SpriteProjectTemplate` entries in `src/domain/projectTemplates.ts`. Blank, icon, and UI button templates use a neutral palette; the hero demo uses a character palette and four animation rows; the ooze palette belongs only to the ooze reference template. Successful template creation, valid import, and demo opening replace the current project, reset undo/redo history, and enter the editor screen intentionally.
 
-Manual paint and erase operations are converted to `PixelPatchOperation[]` and applied through `applyPatch()`. Patch proposals from providers are validated and previewed before they can be applied.
+Manual paint and erase operations are converted to `PixelPatchOperation[]` and applied through `applyPatch()`. User-facing edit proposals from providers are validated and previewed before they can be applied.
 
 Rendering, preview, and PNG export are derived from project data through `composeFramePixels()` and browser canvas utilities. They are not source of truth.
 
-## Current Provider And Patch Assistant State
+## Current Provider And AI Assist State
 
 The provider contract lives in `src/providers/aiPatchProvider.ts`.
 
 Implemented providers:
 
 - `MockPatchProvider`: deterministic local patch generator. Works now.
-- `OllamaPatchProvider`: experimental local HTTP provider. It can request selected-frame patch JSON or a structured animation draft object with frame patch arrays. It may fail if Ollama is unavailable or returns bad JSON.
+- `OllamaPatchProvider`: experimental local HTTP provider. It can request selected-frame edit JSON or a structured animation draft object with frame operation arrays. It may fail if Ollama is unavailable or returns bad JSON.
 
-Patch Assistant state:
+AI Assist state:
 
 - User instruction text.
 - Provider selector.
-- Main Ask panel model controls for refreshing `/api/tags`, pulling/downloading a model through `/api/pull`, and asking `/api/generate`.
-- Plain prompts are padded by SpriteWrite before provider calls. Small edit prompts route to selected-frame patch JSON; static whole-asset prompts such as "gold coin" route to a larger single-frame draft budget; multi-frame or animation prompts route to animation-draft JSON or a recipe rail when a stable recipe family is known.
-- Broad prompts such as "hero idle" or a character idle animation route to structured animation drafting instead of selected-frame patch JSON.
+- Main Ask panel model controls for startup auto-refresh of `/api/tags`, manual refresh, pulling/downloading a model through `/api/pull`, and asking `/api/generate`.
+- Plain prompts are padded by SpriteWrite before provider calls. Small edit prompts route to selected-frame edit JSON; static whole-asset prompts such as "gold coin" route to a larger single-frame draft budget; multi-frame or animation prompts route to animation-draft JSON or a recipe rail when a stable recipe family is known.
+- Broad prompts such as "hero idle" or a character idle animation route to structured animation drafting instead of selected-frame edit JSON.
 - Multi-variation prompts such as "short grass waving, 3 frames, 4 variations" or "tentacle monster, 3 variations" can return multiple animation rows. SpriteWrite replaces the selected row with the first returned animation and appends additional returned rows after validation.
 - Animation drafts are validated frame-by-frame and rejected before mutation if cells are invalid, out of bounds, use unknown colors, or look too scattered.
 - Vision-oriented Ollama models are not blocked, but the UI warns that they may be a poor fit for strict JSON editing. When model capabilities or Ollama details are available, refresh avoids auto-selecting a vision model if a non-vision model is available.
-- Selected-frame Ollama patch parsing accepts raw arrays, `patch`, `operations`, `ops`, `patchOperations`, `patch_operations`, and single-operation objects. Wrong JSON shapes now produce more specific status errors instead of the vague "not a patch operation array" message.
+- Selected-frame Ollama edit parsing accepts raw arrays, `patch`, `operations`, `ops`, `patchOperations`, `patch_operations`, and single-operation objects. Wrong JSON shapes now produce more specific status errors instead of vague provider-contract messages.
 - Mock generation button.
 - Ollama generation/test controls.
 - JSON preview.
-- Current/proposed frame preview derived from project data and the active patch.
-- Changed-cell highlights over current/proposed patch preview.
+- Current/proposed frame preview derived from project data and the active edit.
+- Changed-cell highlights over current/proposed edit preview.
 - Diff summary and operation list.
 - Changed-cell count and affected bounds summary.
 - Operation grouping by color/clear.
@@ -158,9 +158,9 @@ Patch Assistant state:
 - Validation errors.
 - Apply and reject buttons.
 
-Patches do not apply automatically.
+Edits and drafts do not apply automatically.
 
-Intended AI assistance should expand through focused reviewable operations rather than opaque image generation: first-frame drafts from structured descriptions, derived frames, in-betweens, pose changes that preserve identity and palette, follow-through, controlled variants, silhouette cleanup, palette suggestions, animation structure/frame-count suggestions, selected-cell or selected-layer patches, and frame-continuity evaluation.
+Intended AI assistance should expand through focused reviewable operations rather than opaque image generation: first-frame drafts from structured descriptions, derived frames, in-betweens, pose changes that preserve identity and palette, follow-through, controlled variants, silhouette cleanup, palette suggestions, animation structure/frame-count suggestions, selected-cell or selected-layer edits, and frame-continuity evaluation.
 
 ## Current Export And Import State
 
@@ -283,7 +283,7 @@ Covered:
 - full sprite sheet PNG export UI smoke test through the canvas wrapper
 - full sprite sheet PNG plus metadata JSON export UI smoke test
 - paint/erase keyboard shortcut smoke test
-- configurable paint/erase shortcut restore/reset smoke test
+- old shortcut settings panel absence smoke test
 - shortcut typing-field guard smoke test
 - arrow frame-navigation shortcut smoke test
 - command palette open/filter smoke test
@@ -326,7 +326,7 @@ Covered:
 - Ollama connection success/failure tests with stubbed fetch
 - Ollama patch request failure test with stubbed fetch
 - Ollama patch request success test with stubbed fetch and prompt/body assertions
-- SpriteWrite prompt-intent tests for animation prompt padding, single-frame draft padding, selected-frame patch routing, and frame-count inference
+- SpriteWrite prompt-intent tests for animation prompt padding, single-frame draft padding, selected-frame edit routing, and frame-count inference
 - Ollama selected-frame response-shape tests for common patch wrapper aliases and animation-draft/wrong-shape errors
 - Ollama request-body tests for JSON Schema selected-frame patch calls, JSON-mode animation draft calls, `think: false`, and empty-object animation draft errors
 - live Ollama integration coverage that calls local `qwen3:14b` when Ollama and that model are available; current live checks cover coin, grass variation sets, hero idle/cape, and tentacle creature variations
@@ -337,8 +337,9 @@ Covered:
 - app smoke test proving a plain "4-6 frame gold coin spinning animation" request is padded into a 6-frame animation draft before Ollama sees it
 - app smoke test proving a grass variation recipe creates multiple editable animation rows and switches to the full sprite sheet view
 - app smoke test proving a tentacle variation recipe creates connected editable animation rows and switches to the full sprite sheet view
-- app smoke tests for expandable provider details on invalid selected-frame patches and rejected animation drafts
-- app smoke test proving invalid selected-frame Ollama patches do not render canvas proposal overlays
+- app smoke tests for expandable provider details on invalid selected-frame edits and rejected animation drafts
+- app smoke test proving invalid selected-frame Ollama edits do not render canvas proposal overlays
+- app smoke test proving the AI provider defaults to local Ollama
 - app smoke test for warning when a vision-oriented Ollama model is selected
 
 Not covered yet:
@@ -357,19 +358,19 @@ Not covered yet:
 - Unsaved-change warnings exist for page unload and project replacement, but there is no managed file library yet.
 - Undo/redo is snapshot-based.
 - Import duplicate-key detection is limited by JSON parsing; normalized coordinate duplicates are rejected.
-- Patch diff summary supports per-operation removal, include/exclude toggles, changed-cell count, affected bounds, operation grouping, side-by-side current/proposed preview, and changed-cell highlight overlays.
+- Edit diff summary supports per-operation removal, include/exclude toggles, changed-cell count, affected bounds, operation grouping, side-by-side current/proposed preview, and changed-cell highlight overlays.
 - No project schema migration system.
 - Palette editing supports add, reorder, selected color name/hex updates, and unused-color delete, but not palette extraction yet.
 - Multi-animation UI supports add, switch, duplicate, rename, reorder, and delete; animation-specific templates remain future work.
 - Atlas rows support first-pass frame selection, drag reorder, selected-frame duplicate/delete actions, selected-frame duration/notes/tags editing, and a full-sheet pullback view, but row-level affordances still need more polish.
 - The refactored editor is calmer and more canvas-first, but tool icons, contextual inspector depth, and timeline interaction polish remain first-class UX work.
-- Paint/erase shortcut keys are configurable and persisted as browser-local preferences; frame navigation, preview, undo/redo, and command palette shortcuts are fixed.
+- Keyboard shortcuts are fixed for paint, erase, frame navigation, preview, undo/redo, and command palette.
 - The command palette is discoverable and searchable, but it does not yet support user-defined shortcuts or command grouping.
 - No engine-specific Godot or Unity export profiles yet; the current source format and metadata remain engine-neutral.
 - No PNG binary/golden tests yet; pixel-level buffer tests cover the export source before PNG encoding, and jsdom tests cover the canvas wrapper.
 - Export UI exposes scale, margin, and spacing for current animation strips and full sprite sheets.
 - Static assets are currently represented as one-frame frame sequences inside the same project model, then exported through Current Frame PNG or one-frame sheet/metadata if needed.
-- Ollama integration is experimental and not the center of the product. SpriteWrite now pads plain prompts into selected-frame patch, single-frame draft, or animation-draft requests, but draft quality depends heavily on local model capability and strict validation may reject rough model output. Small models may return too-sparse marker patches or unsupported rectangle fields despite the prompt. Qwen-style thinking models may return `{}` unless `think: false` is set, and aborted long requests can leave Ollama busy until the model finishes or is unloaded. Vision-oriented models such as `llava` are especially risky for strict JSON output.
+- Ollama integration is experimental and not the center of the product. SpriteWrite now defaults the visible provider to Ollama local, auto-refreshes local models on real browser startup, and pads plain prompts into selected-frame edit, single-frame draft, or animation-draft requests. Draft quality depends heavily on local model capability and strict validation may reject rough model output. Small models may return too-sparse marker edits or unsupported rectangle fields despite the prompt. Qwen-style thinking models may return `{}` unless `think: false` is set, and aborted long requests can leave Ollama busy until the model finishes or is unloaded. Vision-oriented models such as `llava` are especially risky for strict JSON output.
 
 ## Next Best Development Steps
 
@@ -377,4 +378,4 @@ Not covered yet:
 2. Add asset recipes beyond hero/ooze: tiles, props, backgrounds, effects, and UI/icon assets with editable defaults.
 3. Add PNG binary smoke tests or real browser-level export/download checks.
 4. Expand the layer panel with layer folders while preserving the patch pipeline.
-5. Expand shortcut configuration beyond paint/erase if the workflow needs it.
+5. Revisit shortcut customization only if the workflow clearly needs it; the old persistent shortcut settings panel was removed from the left dock because it cluttered normal drawing.

@@ -63,11 +63,13 @@ Manual paint and erase:
 UI action -> PixelPatchOperation[] -> validatePatch() -> applyPatch() -> SpriteProject
 ```
 
-Patch Assistant:
+AI Assist selected-frame edit:
 
 ```text
 instruction + project context -> provider -> PixelPatchOperation[] -> validate -> preview -> include/exclude/remove -> apply or reject
 ```
+
+The UI should present this flow as AI Assist, edits, and drafts. "Patch" remains an internal JSON operation and validation term, not the primary product language.
 
 Prompt intent padding:
 
@@ -123,7 +125,7 @@ SpriteProject -> Project JSON export
 
 `AiPatchProvider` is the seam for selected-frame patch proposal providers. The Mock provider is deterministic and local. The Ollama provider is experimental and may also expose structured animation-draft and animation-set methods. Provider rails return JSON cell operations or compact recipe JSON that SpriteWrite expands into JSON cell operations.
 
-`src/providers/spriteWritePromptIntent.ts` is the small interpretation layer between plain user prompts and provider calls. It currently classifies prompts as selected-frame patches, single-frame drafts, 3-6 frame animation drafts, or multi-variation animation sets, then pads the instruction with SpriteWrite constraints before Ollama sees it. Users should not need to manually write provider-contract prompts.
+`src/providers/spriteWritePromptIntent.ts` is the small interpretation layer between plain user prompts and provider calls. It currently classifies prompts as selected-frame edits, single-frame drafts, 3-6 frame animation drafts, or multi-variation animation sets, then pads the instruction with SpriteWrite constraints before Ollama sees it. Users should not need to manually write provider-contract prompts.
 
 Current recipe-shaped Ollama rails cover a few observed qwen-stable families: rotating coin, grass wave/tile variation sets, character/hero idle, and tentacle creature variation sets. Direct animation draft JSON remains accepted when a recipe-routed model returns complete frame patch arrays instead.
 

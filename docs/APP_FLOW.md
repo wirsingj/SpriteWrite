@@ -15,32 +15,31 @@ No feature should bypass the `SpriteProject` model. No feature should make the c
 1. Start on the SpriteWrite home screen.
 2. Create a new project, choose a template, import project JSON, or open the current project.
 3. Enter the editor with a valid `SpriteProject`.
-4. Draw manually on the central canvas or open the focused AI Assist surface for a structured patch proposal.
+4. Draw manually on the central canvas or open the focused AI Assist surface for a structured edit proposal.
 5. Use the bottom atlas/filmstrip to choose an animation row or static frame.
 6. Shift-click, ctrl/cmd-click, duplicate, delete, set duration/notes/tags, or drag frames in an atlas row when organizing animation order.
 7. Switch the center workspace between detailed frame editing and full sprite sheet view as needed.
 8. Pick or add an animation, then pick frame and layer when deeper editing is needed.
 9. Pick color and tool.
-10. Adjust paint/erase shortcut keys if desired.
-11. Paint cells manually.
-12. Duplicate or add frames.
-13. Edit selected-frame name, duration, notes, tags, anchor, and hitbox metadata when needed.
-14. Use onion skin for animation continuity.
-15. Preview the current frame or animation.
-16. Optionally refresh/download a local Ollama model and request either a selected-frame patch or a structured animation draft.
-17. For broad prompts such as "hero wearing a cape, standing animation," expect 3-6 editable frame patches in the selected animation row.
-18. Validate patch or draft output.
-19. Preview proposed selected-frame patches before applying them.
-20. Exclude, include, or remove unwanted selected-frame patch operations if needed.
-21. Apply or reject patch/draft output.
-22. Undo or redo as needed.
-23. Add, select, reorder, hide, apply layer presets, change blend mode, exclude from export, or delete layers as needed.
-24. Export project JSON.
-25. Export current frame PNG, current animation strip PNG, full sprite sheet PNG, or full sprite sheet PNG plus metadata JSON.
+10. Paint cells manually.
+11. Duplicate or add frames.
+12. Edit selected-frame name, duration, notes, tags, anchor, and hitbox metadata when needed.
+13. Use onion skin for animation continuity.
+14. Preview the current frame or animation.
+15. Use the default Ollama local provider, optionally refresh/download a local model, or switch to Mock local.
+16. For broad prompts such as "hero wearing a cape, standing animation," expect 3-6 editable frame drafts in the selected animation row.
+17. Validate edit or draft output.
+18. Preview proposed selected-frame edits before applying them.
+19. Exclude, include, or remove unwanted selected-frame edit operations if needed.
+20. Apply or reject edit/draft output.
+21. Undo or redo as needed.
+22. Add, select, reorder, hide, apply layer presets, change blend mode, exclude from export, or delete layers as needed.
+23. Export project JSON.
+24. Export current frame PNG, current animation strip PNG, full sprite sheet PNG, or full sprite sheet PNG plus metadata JSON.
 
 ## Current MVP Flow
 
-The app currently starts on a home screen. The user can create blank 32x32, blank 64x64, icon 32x32, UI button 64x24, hero 32x32 sprite sheet demo, or ooze 32x32 reference projects. Blank/icon/UI button projects use a neutral palette; the hero demo uses a small character palette; the ooze palette is limited to the ooze reference. The quick demo button opens the hero sprite sheet demo: Idle, Jump, Crouch, and Sword Stab rows with 17 total frames. The editor now uses a canvas-first creative-tool layout: compact app header, left tool/palette/layer dock, large center workspace, bottom atlas/filmstrip, and right preview/context inspector. The primary path is clear: draw on the canvas, inspect sheet rows in the filmstrip, click a row/frame, multi-select, duplicate/delete selected row frames, set selected-frame duration/notes/tags, drag-reorder row frames when needed, switch between frame editing and full sprite sheet view, preview, export. AI Assist is available as a focused collapsed surface that can refresh local Ollama models, pull/download a named model, ask Ollama for selected-frame patch JSON, or route broad whole-asset prompts to a structured animation draft made of frame patch arrays. The editor can switch animations, add a new blank animation with matching layer structure, duplicate animations, rename animations, reorder animations, and delete non-final animations.
+The app currently starts on a home screen. The user can create blank 32x32, blank 64x64, icon 32x32, UI button 64x24, hero 32x32 sprite sheet demo, or ooze 32x32 reference projects. Blank/icon/UI button projects use a neutral palette; the hero demo uses a small character palette; the ooze palette is limited to the ooze reference. The quick demo button opens the hero sprite sheet demo: Idle, Jump, Crouch, and Sword Stab rows with 17 total frames. The editor now uses a canvas-first creative-tool layout: compact app header, left tool/palette/layer dock, large center workspace, bottom atlas/filmstrip, and right preview/context inspector. The primary path is clear: draw on the canvas, inspect sheet rows in the filmstrip, click a row/frame, multi-select, duplicate/delete selected row frames, set selected-frame duration/notes/tags, drag-reorder row frames when needed, switch between frame editing and full sprite sheet view, preview, export. AI Assist is available as a focused collapsed surface that defaults to Ollama local, auto-refreshes local Ollama models on browser startup, can pull/download a named model, asks Ollama for selected-frame edit JSON, or routes broad whole-asset prompts to a structured animation draft made of frame operation arrays. The editor can switch animations, add a new blank animation with matching layer structure, duplicate animations, rename animations, reorder animations, and delete non-final animations.
 
 Manual paint and erase operations become patch operations:
 
@@ -51,7 +50,7 @@ Manual paint and erase operations become patch operations:
 ]
 ```
 
-The patch assistant follows the same model. Provider output becomes proposed patch JSON, then validation, then preview, then accept or reject. Whole-animation drafts are stricter: they must validate and pass basic coherence checks before replacing the selected animation row, so invalid model output never half-mutates the project.
+AI Assist follows the same validated-edit model. Provider output becomes proposed edit JSON, then validation, then preview, then accept or reject. Whole-animation drafts are stricter: they must validate and pass basic coherence checks before replacing the selected animation row, so invalid model output never half-mutates the project.
 
 Future AI operations should stay focused and reviewable: draft a first frame, derive a new frame from an existing frame, create an in-between, alter pose while preserving identity and palette, create follow-through, generate controlled variants, clean silhouette noise, suggest palette or animation structure, patch selected cells/layers, or evaluate continuity between frames.
 
@@ -60,16 +59,16 @@ Future AI operations should stay focused and reviewable: draft a first frame, de
 - The center workspace renders either the selected-frame grid editor or a full sprite sheet view.
 - The central grid renders the selected frame and layer from project cells.
 - Onion skin renders previous-frame pixels faintly behind empty current-frame cells.
-- Valid proposed selected-frame patch operations render as an overlay until accepted or rejected.
-- Invalid selected-frame patch operations show errors and do not render overlays on the canvas.
-- Proposed patch operations are also summarized as set/clear counts and an operation list.
-- Individual proposed patch operations can be excluded, re-included, or removed before applying the active patch.
+- Valid proposed selected-frame edit operations render as an overlay until accepted or rejected.
+- Invalid selected-frame edit operations show errors and do not render overlays on the canvas.
+- Proposed edit operations are also summarized as set/clear counts and an operation list.
+- Individual proposed edit operations can be excluded, re-included, or removed before applying the active edit.
 - The atlas overview renders each animation as a bottom filmstrip row attached to the canvas. Frames can be clicked, shift-selected, ctrl/cmd-toggled, duplicated, deleted, batch-timed, batch-tagged, batch-noted, and drag-reordered within their row.
 - The full sprite sheet view renders every animation row in the center workspace using the same row/column order as full sprite sheet PNG export; clicking a real frame returns to detailed frame editing, and shorter rows show transparent trailing cells.
 - The bottom atlas panel height and right preview/inspector panel width can be resized on desktop.
 - The preview panel renders frames from project data at crisp nearest-neighbor scale, uses per-frame duration when present, and can show transparency against either a checkerboard or display-only solid background color.
 - Frame notes and tags are editable project metadata for animation intent and importer/tooling context; they do not render as pixels.
-- AI Assist/Patch Assistant is visually optional; manual drawing, static/animation preview, and exports remain the primary workflow.
+- AI Assist is visually optional; manual drawing, static/animation preview, and exports remain the primary workflow.
 - Exports render project data through canvas only at export time.
 
 ## State Flow
@@ -88,7 +87,7 @@ Future AI operations should stay focused and reviewable: draft a first frame, de
 - `applyPatch()` returns a cloned project with validated cell changes.
 - Undo and redo store project snapshots.
 - Layer changes use cloned project updates. Add/delete/reorder/visibility/export-inclusion/blend-mode operations apply consistently across frames by layer ID.
-- Keyboard shortcuts can switch paint/erase, move between frames, undo/redo, and toggle preview playback when focus is not inside a form control. Paint and erase shortcuts can be changed and are stored as browser-local preferences.
+- Keyboard shortcuts can switch paint/erase, move between frames, undo/redo, and toggle preview playback when focus is not inside a form control. Shortcut customization is not currently exposed in the editor.
 - The command palette opens from the editor header or `Ctrl+K`, filters available commands, and can run common editor/export/patch actions.
 - Import parses JSON, validates it through `validateProject()`, and replaces the in-memory project only when valid.
 - Successful import resets undo/redo history because it is treated as opening a different project.

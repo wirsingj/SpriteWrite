@@ -277,10 +277,14 @@ function getOllamaModelSuitabilityNote(model: string): string {
   const visionModelHints = ['llava', 'bakllava', 'moondream', 'minicpm-v', 'vision']
 
   if (visionModelHints.some((hint) => normalized.includes(hint))) {
-    return 'Vision-oriented Ollama models often follow strict JSON poorly here. A text/instruction or code model is usually a better fit for SpriteWrite patches.'
+    return 'Vision-oriented Ollama models often follow strict JSON poorly here. A text/instruction or code model is usually a better fit for SpriteWrite edits.'
   }
 
   return ''
+}
+
+function shouldSkipBrowserOnlyStartupWork(): boolean {
+  return import.meta.env.MODE === 'test'
 }
 
 function choosePreferredOllamaModel(models: OllamaModelInfo[]): OllamaModelInfo | undefined {
@@ -458,7 +462,7 @@ function App() {
   const [atlasPanelHeight, setAtlasPanelHeight] = useState(DEFAULT_ATLAS_PANEL_HEIGHT)
   const [useSolidPreviewBackground, setUseSolidPreviewBackground] = useState(false)
   const [previewBackgroundColor, setPreviewBackgroundColor] = useState(DEFAULT_PREVIEW_BACKGROUND)
-  const [providerChoice, setProviderChoice] = useState<ProviderChoice>('mock')
+  const [providerChoice, setProviderChoice] = useState<ProviderChoice>('ollama')
   const [instruction, setInstruction] = useState(() => getDefaultPatchInstruction(project))
   const [proposedPatch, setProposedPatch] = useState<PixelPatchOperation[]>([])
   const [disabledPatchOperationIndexes, setDisabledPatchOperationIndexes] = useState<Set<number>>(
@@ -478,7 +482,7 @@ function App() {
   const [exportSpacing, setExportSpacing] = useState(0)
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
   const [commandQuery, setCommandQuery] = useState('')
-  const [shortcuts, setShortcuts] = useState(loadShortcutSettings)
+  const [shortcuts] = useState(loadShortcutSettings)
   const [newProjectName, setNewProjectName] = useState('Untitled Sprite')
   const [newProjectTemplateId, setNewProjectTemplateId] = useState('blank-32')
   const [newProjectWidth, setNewProjectWidth] = useState(32)
@@ -497,6 +501,7 @@ function App() {
   const colorNameInputRef = useRef<HTMLInputElement | null>(null)
   const colorHexInputRef = useRef<HTMLInputElement | null>(null)
   const ollamaAttemptRef = useRef(0)
+  const didAutoRefreshOllamaRef = useRef(false)
   const animationNameInputRef = useRef<HTMLInputElement | null>(null)
   const frameNameInputRef = useRef<HTMLInputElement | null>(null)
   const frameNotesInputRef = useRef<HTMLTextAreaElement | null>(null)
@@ -688,6 +693,56 @@ function App() {
       // Browser draft autosave is a convenience layer; Project JSON remains the real save artifact.
     }
   }, [project])
+
+  useEffect(() => {
+    if (didAutoRefreshOllamaRef.current || shouldSkipBrowserOnlyStartupWork()) {
+      return
+    }
+
+    didAutoRefreshOllamaRef.current = true
+    setProviderChoice('ollama')
+    setProviderMessage(`Checking local Ollama at ${ollamaBaseUrl}...`)
+    setProviderDetails('')
+    setIsOllamaBusy(true)
+
+    listOllamaModels(ollamaBaseUrl)
+      .then((models) => {
+        setOllamaModels(models)
+        const selectedModel = models.some((model) => model.name === ollamaModel)
+          ? ollamaModel
+          : choosePreferredOllamaModel(models)?.name
+        if (selectedModel) {
+          setOllamaModel(selectedModel)
+        }
+        setProviderMessage(
+          models.length
+            ? `Found ${models.length} local Ollama model${models.length === 1 ? '' : 's'}: ${models
+                .map((model) => model.name)
+                .join(', ')}.`
+            : 'Ollama is running, but no local models were reported.',
+        )
+        setProviderDetails(
+          formatProviderDetails('Ollama model refresh result', {
+            baseUrl: ollamaBaseUrl,
+            selectedModel: selectedModel ?? ollamaModel,
+            modelCount: models.length,
+            models,
+            automatic: true,
+          }),
+        )
+      })
+      .catch((error) => {
+        setProviderMessage(formatOllamaError(error, ollamaBaseUrl))
+        setProviderDetails(
+          formatProviderDetails('Ollama model refresh error', {
+            baseUrl: ollamaBaseUrl,
+            error: formatErrorForDetails(error),
+            automatic: true,
+          }),
+        )
+      })
+      .finally(() => setIsOllamaBusy(false))
+  }, [ollamaBaseUrl, ollamaModel])
 
   useEffect(() => {
     try {
@@ -1139,7 +1194,7 @@ function App() {
       setDisabledPatchOperationIndexes(new Set())
       setPatchErrors(validation.errors)
       setProviderDetails(
-        formatProviderDetails('Mock patch result', {
+        formatProviderDetails('Mock edit result', {
           instruction,
           validationErrors: validation.errors,
           patch,
@@ -1172,7 +1227,7 @@ function App() {
     }
 
     setProviderMessage(
-      `Attempt ${attemptContext.attempt}: ${spriteWritePromptIntent.summary} Asking Ollama model "${ollamaModel}" for editable patch JSON...${
+      `Attempt ${attemptContext.attempt}: ${spriteWritePromptIntent.summary} Asking Ollama model "${ollamaModel}" for editable JSON...${
         ollamaModelSuitabilityNote ? ` ${ollamaModelSuitabilityNote}` : ''
       }`,
     )
@@ -1195,7 +1250,7 @@ function App() {
       setDisabledPatchOperationIndexes(new Set())
       setPatchErrors(validation.errors)
       setProviderDetails(
-        formatProviderDetails('Ollama frame patch response', {
+        formatProviderDetails('Ollama frame edit response', {
           attempt: attemptContext.attempt,
           elapsedMs: formatElapsedMs(attemptContext.startedAt),
           mode: spriteWritePromptIntent.mode,
@@ -1212,12 +1267,12 @@ function App() {
         validation.valid
           ? `Attempt ${attemptContext.attempt} completed in ${formatElapsedMs(
               attemptContext.startedAt,
-            )}. Ollama proposed ${patch.length} operation${patch.length === 1 ? '' : 's'}. Review before applying.`
+            )}. Ollama proposed ${patch.length} change${patch.length === 1 ? '' : 's'}. Review before applying.`
           : `Attempt ${attemptContext.attempt} completed in ${formatElapsedMs(
               attemptContext.startedAt,
-            )}. Ollama returned ${patch.length} operation${
+            )}. Ollama returned ${patch.length} change${
               patch.length === 1 ? '' : 's'
-            }, but validation found issues. The canvas overlay is hidden until the patch is valid.`,
+            }, but validation found issues. The canvas overlay is hidden until the edit is valid.`,
       )
     } catch (error) {
       setProposedPatch([])
@@ -1225,7 +1280,7 @@ function App() {
       setPatchErrors([])
       setProviderMessage(formatOllamaError(error, ollamaBaseUrl))
       setProviderDetails(
-        formatProviderDetails('Ollama frame patch error', {
+        formatProviderDetails('Ollama frame edit error', {
           attempt: attemptContext.attempt,
           elapsedMs: formatElapsedMs(attemptContext.startedAt),
           mode: spriteWritePromptIntent.mode,
@@ -1251,7 +1306,7 @@ function App() {
     ollamaAttemptRef.current = Math.max(ollamaAttemptRef.current, attemptContext.attempt)
     setProviderChoice('ollama')
     setProviderMessage(
-      `Attempt ${attemptContext.attempt}: ${intent.summary} Asking Ollama model "${ollamaModel}" for structured editable frame patches...${
+      `Attempt ${attemptContext.attempt}: ${intent.summary} Asking Ollama model "${ollamaModel}" for structured editable frames...${
         ollamaModelSuitabilityNote ? ` ${ollamaModelSuitabilityNote}` : ''
       }`,
     )
@@ -1718,7 +1773,7 @@ function App() {
       const message = await pullOllamaModel(ollamaBaseUrl, ollamaModel)
       const models = await listOllamaModels(ollamaBaseUrl)
       setOllamaModels(models)
-      setProviderMessage(`${message} Ready for structured patch requests.`)
+      setProviderMessage(`${message} Ready for structured edit requests.`)
       setProviderDetails(
         formatProviderDetails('Ollama model download result', {
           baseUrl: ollamaBaseUrl,
@@ -1752,7 +1807,7 @@ function App() {
     if (!validation.valid) {
       setPatchErrors(validation.errors)
       setProviderDetails(
-        formatProviderDetails('Patch apply blocked by validation', {
+        formatProviderDetails('Edit apply blocked by validation', {
           validationErrors: validation.errors,
           activePatch: activeProposedPatch,
         }),
@@ -1763,7 +1818,7 @@ function App() {
     setProposedPatch([])
     setDisabledPatchOperationIndexes(new Set())
     setPatchErrors([])
-    setProviderMessage('Patch applied.')
+    setProviderMessage('Edit applied.')
     setProviderDetails('')
   }
 
@@ -1771,7 +1826,7 @@ function App() {
     setProposedPatch([])
     setDisabledPatchOperationIndexes(new Set())
     setPatchErrors([])
-    setProviderMessage('Patch rejected.')
+    setProviderMessage('Edit rejected.')
     setProviderDetails('')
   }
 
@@ -2190,24 +2245,6 @@ function App() {
     setProviderMessage(`Applied ${preset.label} layer preset.`)
   }
 
-  function updateShortcut(action: ShortcutAction, value: string) {
-    const nextShortcut = value.trim().slice(0, 1).toLowerCase()
-    if (!nextShortcut) {
-      return
-    }
-
-    const conflictingAction = (Object.keys(shortcuts) as ShortcutAction[]).find(
-      (candidate) => candidate !== action && shortcuts[candidate] === nextShortcut,
-    )
-    if (conflictingAction) {
-      setProviderMessage(`Shortcut "${nextShortcut.toUpperCase()}" is already assigned to ${conflictingAction}.`)
-      return
-    }
-
-    setShortcuts((current) => ({ ...current, [action]: nextShortcut }))
-    setProviderMessage(`Updated ${action} shortcut to "${nextShortcut.toUpperCase()}".`)
-  }
-
   function saveSelectedColor() {
     if (!selectedColor || selectedColor.isTransparent) {
       return
@@ -2367,21 +2404,21 @@ function App() {
     },
     {
       id: 'patch-generate-mock',
-      label: 'Generate mock patch',
-      description: 'Ask the deterministic local mock provider for a patch proposal.',
+      label: 'Generate mock edit',
+      description: 'Ask the deterministic local mock provider for an editable change.',
       run: generateMockPatch,
     },
     {
       id: 'patch-apply',
-      label: 'Apply proposed patch',
-      description: 'Accept the current validated patch proposal.',
+      label: 'Apply proposed edit',
+      description: 'Accept the current validated edit proposal.',
       disabled: activeProposedPatch.length === 0 || !patchValidation.valid,
       run: applyProposedPatch,
     },
     {
       id: 'patch-reject',
-      label: 'Reject proposed patch',
-      description: 'Discard the current patch proposal.',
+      label: 'Reject proposed edit',
+      description: 'Discard the current edit proposal.',
       disabled: proposedPatch.length === 0,
       run: rejectPatch,
     },
@@ -2657,8 +2694,8 @@ function App() {
                 value={providerChoice}
                 onChange={(event) => setProviderChoice(event.target.value as ProviderChoice)}
               >
-                <option value="mock">Mock local patch</option>
-                <option value="ollama">Ollama local patch</option>
+                <option value="ollama">Ollama local</option>
+                <option value="mock">Mock local</option>
               </select>
             </label>
             {providerChoice === 'ollama' ? (
@@ -2675,7 +2712,7 @@ function App() {
                     disabled={!ollamaModels.length}
                   >
                     <option value="" disabled>
-                      {ollamaModels.length ? 'Choose installed model' : 'Refresh models first'}
+                      {ollamaModels.length ? 'Choose installed model' : 'Checking local models...'}
                     </option>
                     {ollamaModels.map((model) => (
                       <option key={model.name} value={model.name}>
@@ -2709,7 +2746,7 @@ function App() {
             ) : null}
             <div className="button-stack">
               <button type="button" onClick={generateMockPatch}>
-                Generate Mock Patch
+                Generate Mock Edit
               </button>
               <button type="button" onClick={generateOllamaPatch} disabled={isOllamaBusy}>
                 {isOllamaBusy && providerChoice === 'ollama'
@@ -2720,14 +2757,14 @@ function App() {
                       : 'Ask Ollama For Animation Draft'
                     : spriteWritePromptIntent.mode === 'frame-draft'
                       ? 'Ask Ollama For Frame Draft'
-                      : 'Ask Ollama For Frame Patch'}
+                      : 'Ask Ollama For Frame Edit'}
               </button>
             </div>
             {providerMessage ? <p className="provider-message">{providerMessage}</p> : null}
             <ProviderDetails details={providerDetails} />
             <p className="status-line">
-              SpriteWrite pads plain prompts into a selected-frame patch, single-frame draft, or
-              animation row draft. Ollama only returns editable grid data, never opaque image blobs.
+              SpriteWrite pads plain prompts into focused frame edits, single-frame drafts, or
+              animation row drafts. Ollama only returns editable grid data, never opaque image blobs.
             </p>
           </section>
           </details>
@@ -2859,31 +2896,6 @@ function App() {
               </details>
             ) : null}
           </section>
-
-          <details className="advanced-panel shortcut-settings">
-            <summary>Shortcuts</summary>
-            <div className="form-grid">
-              <label>
-                Paint
-                <input
-                  maxLength={1}
-                  value={shortcuts.paint.toUpperCase()}
-                  onChange={(event) => updateShortcut('paint', event.target.value)}
-                />
-              </label>
-              <label>
-                Erase
-                <input
-                  maxLength={1}
-                  value={shortcuts.erase.toUpperCase()}
-                  onChange={(event) => updateShortcut('erase', event.target.value)}
-                />
-              </label>
-            </div>
-            <button type="button" onClick={() => setShortcuts(DEFAULT_SHORTCUTS)}>
-              Reset Shortcuts
-            </button>
-          </details>
 
           <section className={`dock-panel layers-panel ${dockTab === 'layers' ? 'active' : ''}`}>
             <h2>Layers</h2>
@@ -3398,7 +3410,7 @@ function App() {
           <details className="optional-panel">
             <summary>
               <span>
-                <strong>Patch Assistant</strong>
+                <strong>AI Assistant</strong>
                 <small>Optional structured edit proposals. Manual drawing and exports work without it.</small>
               </span>
             </summary>
@@ -3656,7 +3668,7 @@ function CommandPalette({
         <div className="command-palette-header">
           <div>
             <h2>Commands</h2>
-            <p>Find editor actions, exports, frames, layers, and patch commands.</p>
+            <p>Find editor actions, exports, frames, layers, and edit commands.</p>
           </div>
           <button type="button" onClick={onClose}>
             Close
@@ -4137,15 +4149,15 @@ function PatchAssistant({
 
   return (
     <section className="patch-assistant">
-      <h2>Patch Assistant</h2>
+      <h2>AI Assistant</h2>
       <label>
         Provider
         <select
           value={providerChoice}
           onChange={(event) => setProviderChoice(event.target.value as ProviderChoice)}
         >
-          <option value="mock">Mock</option>
-          <option value="ollama">Ollama experimental</option>
+          <option value="ollama">Ollama local</option>
+          <option value="mock">Mock local</option>
         </select>
       </label>
       <label>
@@ -4178,13 +4190,13 @@ function PatchAssistant({
       ) : (
         <div className="button-stack">
           <button type="button" onClick={onGenerateMock}>
-            Generate Mock Patch
+            Generate Mock Edit
           </button>
         </div>
       )}
 
       <div className="patch-json-header">
-        <span>Active patch JSON</span>
+        <span>Active edit JSON</span>
         {proposedPatch.length ? (
           <span>
             {activeProposedPatch.length}/{proposedPatch.length} enabled
@@ -4224,10 +4236,10 @@ function PatchAssistant({
 
       <div className="frame-actions">
         <button type="button" onClick={onApply} disabled={!canApply}>
-          Apply Patch
+          Apply Edit
         </button>
         <button type="button" onClick={onReject} disabled={!proposedPatch.length}>
-          Reject Patch
+          Reject Edit
         </button>
       </div>
     </section>
@@ -4271,7 +4283,7 @@ function PatchPreviewComparison({
         />
       </div>
       <div>
-        <span>Proposed patch</span>
+        <span>Proposed edit</span>
         {proposedPreviewProject ? (
           <MiniSprite
             project={proposedPreviewProject}
@@ -4280,7 +4292,7 @@ function PatchPreviewComparison({
           />
         ) : (
           <div className="mini-sprite empty-preview">
-            {hasActivePatch ? 'Invalid' : 'No patch'}
+            {hasActivePatch ? 'Invalid' : 'No edit'}
           </div>
         )}
       </div>
@@ -4340,7 +4352,7 @@ function PatchDiff({
         </span>
       </div>
       {activePatch.length ? (
-        <div className="patch-group-list" aria-label="Active patch groups">
+        <div className="patch-group-list" aria-label="Active edit groups">
           {Object.entries(operationGroups).map(([group, count]) => (
             <span key={group}>
               {group} {count}
@@ -4375,7 +4387,7 @@ function PatchDiff({
           })}
         </ol>
       ) : (
-        <p>No proposed patch.</p>
+        <p>No proposed edit.</p>
       )}
       {patch.length > 12 ? <p>{patch.length - 12} more operation(s).</p> : null}
     </div>
