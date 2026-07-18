@@ -55,7 +55,7 @@ describe('App shell', () => {
     expect(container.textContent).toContain('Preview')
     expect(container.textContent).toContain('Frame Details')
     expect(container.textContent).toContain('Top strip controls sheet order')
-    expect(container.textContent).toContain('Optional structured edit proposals')
+    expect(container.textContent).toContain('Ollama only returns editable grid data')
   })
 
   it('selects frames from the atlas overview before detailed editing', () => {
@@ -140,7 +140,7 @@ describe('App shell', () => {
       atlasFrames[0].dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }))
     })
 
-    clickButton('Duplicate Selected')
+    clickButton('Duplicate Frame')
 
     expect(container.textContent).toContain('Duplicated 2 selected frames.')
 
@@ -174,7 +174,7 @@ describe('App shell', () => {
       atlasFrames[1].dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }))
     })
 
-    clickButton('Delete Selected')
+    clickButton('Delete Frame')
 
     expect(container.textContent).toContain('Deleted 2 selected frames.')
 
@@ -186,7 +186,7 @@ describe('App shell', () => {
     const idleFrameIds = exported.animations.find((animation) => animation.id === 'idle')?.frameIds ?? []
 
     expect(idleFrameIds).toEqual(['idle-001'])
-    expect(getButtonWithin('.atlas-actions', 'Delete Selected').disabled).toBe(true)
+    expect(getButtonWithin('.atlas-actions', 'Delete Frame').disabled).toBe(true)
   })
 
   it('sets duration across selected atlas frames', async () => {
@@ -467,19 +467,23 @@ describe('App shell', () => {
 
   it('pads plain animation prompts before asking Ollama for draft frames', async () => {
     const makeCoinPatch = (frameIndex: number) => {
-      const left = frameIndex % 3 === 1 ? 15 : 14
-      const right = frameIndex % 3 === 1 ? 16 : 17
-      return [
-        { op: 'set', x: left, y: 14, colorId: 'ink' },
-        { op: 'set', x: left + 1, y: 14, colorId: 'coin_gold' },
-        { op: 'set', x: right, y: 14, colorId: 'ink' },
-        { op: 'set', x: left, y: 15, colorId: 'coin_gold' },
-        { op: 'set', x: left + 1, y: 15, colorId: 'coin_highlight' },
-        { op: 'set', x: right, y: 15, colorId: 'coin_light' },
-        { op: 'set', x: left, y: 16, colorId: 'ink' },
-        { op: 'set', x: left + 1, y: 16, colorId: 'coin_shadow' },
-        { op: 'set', x: right, y: 16, colorId: 'ink' },
-      ]
+      const widths = [8, 4, 8, 3, 6, 3]
+      const width = widths[frameIndex % widths.length]
+      const left = Math.floor(16 - width / 2)
+      const patch = []
+      for (let y = 11; y <= 20; y += 1) {
+        for (let x = left; x < left + width; x += 1) {
+          const edge = x === left || x === left + width - 1 || y === 11 || y === 20
+          const highlight = x === left + ((frameIndex + 1) % width) && y >= 12 && y <= 16
+          patch.push({
+            op: 'set' as const,
+            x,
+            y,
+            colorId: edge ? 'ink' : highlight ? 'coin_highlight' : y > 17 ? 'coin_shadow' : 'coin_gold',
+          })
+        }
+      }
+      return patch
     }
     const draft = {
       animationName: 'Coin Spin',
@@ -721,22 +725,20 @@ describe('App shell', () => {
 
     await clickButtonAsync('Ask Ollama')
 
-    expect(fetch).toHaveBeenCalledTimes(1)
-    expect(container.textContent).toContain('Ollama animation draft rejected.')
-    expect(container.textContent).toContain('Frame 1:')
+    expect(fetch).toHaveBeenCalledTimes(3)
+    expect(container.textContent).toContain('Ollama draft failed SpriteWrite quality checks after 3 attempts.')
+    expect(container.textContent).toContain('Show provider details')
     expect(container.textContent).toContain('missing_color')
     expect(container.textContent).toContain('Show provider details')
     const details = container.querySelector('.provider-details pre')?.textContent ?? ''
     expect(details).toContain('"userInstruction": "a 4-6 frame gold coin spinning animation"')
-    expect(details).toContain('"validationErrors"')
+    expect(details).toContain('"attempts"')
     expect(details).toContain('missing_color')
     expect(details).toContain('"draft"')
 
     await clickButtonAsync('Ask Ollama')
 
-    expect(fetch).toHaveBeenCalledTimes(2)
-    expect(container.textContent).toContain('Attempt 2 completed')
-    expect(container.querySelector('.provider-details pre')?.textContent).toContain('"attempt": 2')
+    expect(container.querySelector('.provider-details pre')?.textContent).toContain('"attempt": 3')
   })
 
   it('reorders frames by dragging within an atlas row', async () => {
@@ -772,7 +774,7 @@ describe('App shell', () => {
     })
 
     clickButton('New Project')
-    expect(container.textContent).toContain('AI Assistant')
+    expect(container.textContent).toContain('AI Assist')
 
     clickButton('Home')
 
@@ -782,7 +784,7 @@ describe('App shell', () => {
 
     clickButton('Open Current Project')
 
-    expect(container.textContent).toContain('AI Assistant')
+    expect(container.textContent).toContain('AI Assist')
     expect(container.textContent).toContain('Saved as Project JSON')
   })
 
@@ -879,20 +881,49 @@ describe('App shell', () => {
     const previewBox = getRequiredElement('.preview-box') as HTMLDivElement
     const backgroundToggle = Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'))
       .find((input) => input.parentElement?.textContent?.includes('Solid preview background'))
-    const colorInput = container.querySelector<HTMLInputElement>('.preview-background-controls input[type="color"]')
+    const pickerButton = container.querySelector<HTMLButtonElement>('button[aria-label^="Preview background color"]')
 
-    if (!backgroundToggle || !colorInput) {
+    if (!backgroundToggle || !pickerButton) {
       throw new Error('Missing preview background controls.')
     }
 
     act(() => {
       backgroundToggle.click()
+      pickerButton.click()
     })
+    const colorInput = getRequiredElement('.color-picker-native') as HTMLInputElement
     setInputValue(colorInput, '#334455')
 
     expect(previewBox.classList.contains('solid-preview-background')).toBe(true)
     expect(previewBox.getAttribute('style')).toContain('--preview-background-color: #334455')
     expect(container.textContent).toContain('Export Plan')
+  })
+
+  it('lets the center editor use a solid canvas background color', () => {
+    act(() => {
+      root.render(<App />)
+    })
+
+    clickButton('New Project')
+
+    const gridScroll = getRequiredElement('.pixel-grid-scroll') as HTMLDivElement
+    const backgroundToggle = Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'))
+      .find((input) => input.parentElement?.textContent?.includes('Canvas background'))
+    const pickerButton = container.querySelector<HTMLButtonElement>('button[aria-label^="Canvas background color"]')
+
+    if (!backgroundToggle || !pickerButton) {
+      throw new Error('Missing canvas background controls.')
+    }
+
+    act(() => {
+      backgroundToggle.click()
+      pickerButton.click()
+    })
+    const colorInput = getRequiredElement('.color-picker-native') as HTMLInputElement
+    setInputValue(colorInput, '#445566')
+
+    expect(gridScroll.classList.contains('solid-editor-background')).toBe(true)
+    expect(getRequiredElement('.workbench').getAttribute('style')).toContain('--editor-background-color: #445566')
   })
 
   it('switches paint and erase tools with keyboard shortcuts', () => {
@@ -924,19 +955,17 @@ describe('App shell', () => {
     expect(container.textContent).not.toContain('Reset Shortcuts')
   })
 
-  it('defaults the AI provider to local Ollama', () => {
+  it('keeps the visible AI surface focused on local Ollama', () => {
     act(() => {
       root.render(<App />)
     })
 
     clickButton('New Project')
 
-    const providerSelect = Array.from(container.querySelectorAll<HTMLSelectElement>('select')).find((select) =>
-      Array.from(select.options).some((option) => option.value === 'ollama'),
-    )
-
-    expect(providerSelect?.value).toBe('ollama')
-    expect(container.textContent).toContain('Ollama local')
+    expect(container.textContent).toContain('Ollama URL')
+    expect(container.textContent).toContain('Ask Ollama For Frame Edit')
+    expect(container.textContent).not.toContain('Mock local')
+    expect(container.textContent).not.toContain('Generate Mock Edit')
   })
 
   it('does not run editor shortcuts while typing in fields', () => {
@@ -1099,7 +1128,7 @@ describe('App shell', () => {
 
     clickButton('New Project')
 
-    expect(getButtonWithin('.frame-actions', 'Delete Frame').disabled).toBe(true)
+    expect(getButtonWithin('.atlas-actions', 'Delete Frame').disabled).toBe(true)
     expect(getButtonWithin('.animation-controls', 'Delete').disabled).toBe(true)
     expect(getButtonWithin('.layer-actions', 'Delete').disabled).toBe(true)
   })
@@ -1146,12 +1175,22 @@ describe('App shell', () => {
   })
 
   it('undoes an accepted patch apply from the editor', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          response: '[{"op":"set","x":16,"y":16,"colorId":"ink"}]',
+        }),
+      } as Response),
+    )
+
     act(() => {
       root.render(<App />)
     })
 
     clickButton('New Project')
-    await clickButtonAsync('Generate Mock Edit')
+    await clickButtonAsync('Ask Ollama')
     clickButton('Apply Edit')
 
     const afterApply = setupDownloadCapture()
@@ -1159,7 +1198,7 @@ describe('App shell', () => {
     const appliedProject = JSON.parse((await afterApply.capturedBlob.current?.text()) ?? '{}') as {
       frames: Array<{ layers: Array<{ id: string; cells: Record<string, string> }> }>
     }
-    expect(Object.keys(appliedProject.frames[0].layers[0].cells)).toHaveLength(5)
+    expect(Object.keys(appliedProject.frames[0].layers[0].cells)).toHaveLength(1)
 
     vi.restoreAllMocks()
     act(() => {
@@ -1175,13 +1214,23 @@ describe('App shell', () => {
   })
 
   it('rejects a proposed edit without mutating the project', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          response: '[{"op":"set","x":16,"y":16,"colorId":"ink"}]',
+        }),
+      } as Response),
+    )
+
     act(() => {
       root.render(<App />)
     })
 
     clickButton('New Project')
-    await clickButtonAsync('Generate Mock Edit')
-    expect(container.textContent).toContain('5/5 enabled')
+    await clickButtonAsync('Ask Ollama')
+    expect(container.textContent).toContain('1/1 enabled')
 
     clickButton('Reject Edit')
 
@@ -1477,6 +1526,29 @@ describe('App shell', () => {
 
     expect(container.textContent).toContain('Line Art')
     expect(container.textContent).toContain('Updated palette color "ink".')
+  })
+
+  it('opens the in-app color picker when adding a palette color', async () => {
+    act(() => {
+      root.render(<App />)
+    })
+
+    clickButton('New Project')
+    clickButtonWithin('.palette-inspector', 'Add Color')
+
+    expect(container.querySelector('.color-picker-popover')).toBeTruthy()
+    const colorInput = getRequiredElement('.color-picker-native') as HTMLInputElement
+    setInputValue(colorInput, '#aa44ff')
+
+    const { capturedBlob } = setupDownloadCapture()
+    clickButton('Export Project JSON')
+    const exportedProject = JSON.parse((await capturedBlob.current?.text()) ?? '{}') as {
+      palette: Array<{ name: string; hex: string }>
+    }
+
+    expect(exportedProject.palette).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: 'Color 8', hex: '#aa44ff' })]),
+    )
   })
 
   it('adds, reorders, and deletes an unused palette color from the palette inspector', async () => {
@@ -1789,106 +1861,22 @@ describe('App shell', () => {
     expect(capturedBlob.current?.type).toBe('image/png')
   })
 
-  it('can exclude a proposed edit operation before apply', async () => {
-    act(() => {
-      root.render(<App />)
-    })
-
-    clickButton('New Project')
-    await clickButtonAsync('Generate Mock Edit')
-
-    expect(container.textContent).toContain('5/5 enabled')
-    expect(container.textContent).toContain('Current frame')
-    expect(container.textContent).toContain('Proposed edit')
-    expect(container.textContent).toContain('Cells 5')
-    expect(container.textContent).toContain('Bounds')
-    expect(container.textContent).toContain('ink 5')
-    expect(container.querySelectorAll('.mini-highlight')).toHaveLength(10)
-
-    clickButton('Exclude')
-
-    expect(container.textContent).toContain('4/5 enabled')
-    expect(container.textContent).toContain('Cells 4')
-    expect(container.textContent).toContain('ink 4')
-    expect(container.textContent).toContain('1 operation(s) excluded from apply.')
-    expect(container.querySelectorAll('.mini-highlight')).toHaveLength(8)
-  })
-
-  it('can remove a proposed edit operation before apply', async () => {
-    act(() => {
-      root.render(<App />)
-    })
-
-    clickButton('New Project')
-    await clickButtonAsync('Generate Mock Edit')
-
-    clickButton('Remove')
-
-    expect(container.textContent).toContain('4/4 enabled')
-    expect(container.textContent).toContain('Cells 4')
-    expect(container.querySelectorAll('.mini-highlight')).toHaveLength(8)
-
-    clickButton('Apply Edit')
-
-    const afterApply = setupDownloadCapture()
-    clickButton('Export Project JSON')
-    const exportedProject = JSON.parse((await afterApply.capturedBlob.current?.text()) ?? '{}') as {
-      frames: Array<{ layers: Array<{ id: string; cells: Record<string, string> }> }>
-    }
-    expect(Object.keys(exportedProject.frames[0].layers[0].cells)).toHaveLength(4)
-  })
-
-  it('does not apply a patch when every proposed operation is excluded', async () => {
-    act(() => {
-      root.render(<App />)
-    })
-
-    clickButton('New Project')
-    await clickButtonAsync('Generate Mock Edit')
-
-    for (let index = 0; index < 5; index += 1) {
-      clickButton('Exclude')
-    }
-
-    expect(container.textContent).toContain('0/5 enabled')
-    const applyButton = Array.from(container.querySelectorAll('button')).find(
-      (button) => button.textContent?.trim() === 'Apply Edit',
-    )
-    expect(applyButton?.disabled).toBe(true)
-
-    act(() => {
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))
-    })
-    const commandSearch = container.querySelector<HTMLInputElement>('.command-palette input')
-    if (!commandSearch) {
-      throw new Error('Missing command palette search input.')
-    }
-
-    setInputValue(commandSearch, 'apply proposed edit')
-    const commandButton = Array.from(container.querySelectorAll<HTMLButtonElement>('.command-item')).find(
-      (button) => button.textContent?.includes('Apply proposed edit'),
-    )
-    expect(commandButton?.disabled).toBe(true)
-
-    act(() => {
-      commandSearch.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
-    })
-
-    const afterAttempt = setupDownloadCapture()
-    clickButton('Export Project JSON')
-    const exportedProject = JSON.parse((await afterAttempt.capturedBlob.current?.text()) ?? '{}') as {
-      frames: Array<{ layers: Array<{ id: string; cells: Record<string, string> }> }>
-    }
-    expect(Object.keys(exportedProject.frames[0].layers[0].cells)).toHaveLength(0)
-  })
   it('clears stale proposed edits after a provider failure', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue({
-        ok: false,
-        status: 503,
-        statusText: 'Unavailable',
-      } as Response),
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            response: '[{"op":"set","x":16,"y":16,"colorId":"ink"}]',
+          }),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 503,
+          statusText: 'Unavailable',
+        } as Response),
     )
 
     act(() => {
@@ -1896,27 +1884,13 @@ describe('App shell', () => {
     })
 
     clickButton('New Project')
-    await clickButtonAsync('Generate Mock Edit')
-    expect(container.textContent).toContain('5/5 enabled')
+    await clickButtonAsync('Ask Ollama')
+    expect(container.textContent).toContain('1/1 enabled')
 
-    const providerSelect = Array.from(container.querySelectorAll('select')).find((select) =>
-      Array.from(select.options).some((option) => option.value === 'ollama'),
-    )
-    if (!providerSelect) {
-      throw new Error('Missing provider selector.')
-    }
-
-    act(() => {
-      providerSelect.value = 'ollama'
-      providerSelect.dispatchEvent(new Event('change', { bubbles: true }))
-    })
-
-    await clickButtonAsync('Generate With Ollama')
+    await clickButtonAsync('Ask Ollama')
 
     expect(container.textContent).toContain('Ollama returned 503 Unavailable')
-    expect(container.textContent).not.toContain('5/5 enabled')
-
-    clickButton('Apply Edit')
+    expect(container.textContent).not.toContain('1/1 enabled')
 
     const afterFailure = setupDownloadCapture()
     clickButton('Export Project JSON')

@@ -82,10 +82,10 @@ Use this after each Codex pass. The goal is not ceremony; the goal is to keep Sp
 - [ ] Onion skin does not mutate data.
 - [ ] Keyboard shortcuts do not fire while typing in fields.
 - [ ] Keyboard shortcuts ignoring typing fields are covered by a UI smoke test.
-- [ ] Paint/erase shortcut key configuration restore/reset behavior is covered by a UI smoke test.
+- [ ] Fixed paint/erase shortcuts work and do not fire while typing.
 - [ ] Arrow shortcuts move between frames.
 - [ ] Arrow frame-navigation shortcuts are covered by a UI smoke test.
-- [ ] Command palette opens from the header and `Ctrl+K`.
+- [ ] Command palette opens with `Ctrl+K`.
 - [ ] Command palette filtering makes export/frame/layer/patch actions discoverable.
 - [ ] Layer add/delete/reorder controls keep frames valid.
 - [ ] Layer add/reorder/delete is covered by a UI smoke test.
@@ -118,14 +118,13 @@ Use this after each Codex pass. The goal is not ceremony; the goal is to keep Sp
 
 ## Patch Assistant Audit
 
-- [ ] Mock patch generates.
+- [ ] Mock provider remains an internal/test fixture and is not visible in the creative UI.
 - [ ] Patch preview is visible.
 - [ ] Side-by-side current/proposed patch preview is visible.
 - [ ] Current/proposed patch preview highlights changed cells.
 - [ ] Patch diff summary matches proposed JSON.
 - [ ] Patch diff shows active operation count, changed-cell count, and affected bounds.
 - [ ] Patch diff groups active operations by color/clear.
-- [ ] Proposed patch operations can be excluded and re-included before apply.
 - [ ] Individual proposed patch operations can be removed before apply.
 - [ ] Validation errors are visible.
 - [ ] Reject does not mutate project.

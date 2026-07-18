@@ -9,7 +9,8 @@
     "typecheck": "tsc -b",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run --exclude src/providers/*.live.test.ts",
+    "test:ollama": "vitest run src/providers/ollamaQualityProbe.live.test.ts"
   },
   "dependencies": {
     "react": "^19.2.6",

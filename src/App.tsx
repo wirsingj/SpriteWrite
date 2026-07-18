@@ -4,11 +4,17 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type DragEvent,
-  type MouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import './App.css'
+import { AtlasOverview } from './components/AtlasOverview'
+import { ColorPickerField } from './components/ColorPickerField'
+import { CommandPalette, type CommandItem } from './components/CommandPalette'
+import { FullSheetWorkspace } from './components/FullSheetWorkspace'
+import { MiniSprite } from './components/MiniSprite'
+import { ProviderDetails } from './components/ProviderDetails'
+import { StartScreen } from './components/StartScreen'
+import { formatAssetType } from './domain/assetTypes'
 import {
   applyPatch,
   addAnimationToProject,
@@ -53,16 +59,21 @@ import {
   getProjectTemplate,
   SPRITE_PROJECT_TEMPLATES,
 } from './domain/projectTemplates'
-import { MockPatchProvider } from './providers/mockPatchProvider'
 import {
   listOllamaModels,
   type OllamaAnimationSetDraft,
   type OllamaAnimationDraft,
   OllamaPatchProvider,
   pullOllamaModel,
-  testOllamaConnection,
   type OllamaModelInfo,
 } from './providers/ollamaPatchProvider'
+import {
+  formatDraftQualityAttempts,
+  OllamaDraftQualityError,
+  requestImprovedAnimationDraft,
+  requestImprovedAnimationSetDraft,
+  type OllamaDraftQualityAttempt,
+} from './providers/ollamaDraftQuality'
 import {
   createSpriteWritePromptIntent,
   type SpriteWriteAssetOutputContext,
@@ -78,7 +89,6 @@ import {
 import { downloadBlob, downloadTextFile } from './utils/download'
 
 type Tool = 'paint' | 'erase'
-type ProviderChoice = 'mock' | 'ollama'
 type AppMode = 'start' | 'editor'
 type WorkspaceMode = 'frame' | 'sheet'
 type DockTab = 'palette' | 'layers'
@@ -89,16 +99,7 @@ type ProviderAttemptContext = {
   attempt: number
   startedAt: number
 }
-type CommandItem = {
-  id: string
-  label: string
-  description: string
-  shortcut?: string
-  disabled?: boolean
-  run: () => void | Promise<void>
-}
 
-const mockProvider = new MockPatchProvider()
 const TRANSPARENT_LABEL = 'transparent'
 const BROWSER_DRAFT_STORAGE_KEY = 'spritewrite.browserDraft.v1'
 const SHORTCUTS_STORAGE_KEY = 'spritewrite.shortcuts.v1'
@@ -116,51 +117,20 @@ const LAYER_PRESETS: Array<{
   { id: 'shadow', label: 'Shadow', properties: { exportable: true, opacity: 0.55, blendMode: 'multiply' } },
   { id: 'highlight', label: 'Highlight', properties: { exportable: true, opacity: 0.7, blendMode: 'screen' } },
 ]
-const ASSET_TYPE_OPTIONS: SpriteAssetType[] = [
-  'character',
-  'creature',
-  'tile',
-  'environment',
-  'prop',
-  'object',
-  'background',
-  'effect',
-  'ui',
-  'icon',
-  'custom',
-]
-const ASSET_TYPE_LABELS: Record<SpriteAssetType, string> = {
-  character: 'Character',
-  creature: 'Creature',
-  tile: 'Tile',
-  environment: 'Environment',
-  prop: 'Prop',
-  object: 'Object',
-  background: 'Background',
-  effect: 'Effect',
-  ui: 'UI / Icon',
-  icon: 'Icon',
-  custom: 'Custom',
-  enemy: 'Enemy (legacy)',
-  ooze: 'Creature (legacy ooze)',
-  button: 'UI (legacy button)',
-  parallax: 'Background (legacy parallax)',
-  generic: 'Custom (legacy)',
-}
 const MIN_RIGHT_PANEL_WIDTH = 260
-const MAX_RIGHT_PANEL_WIDTH = 520
+const MAX_RIGHT_PANEL_WIDTH = 560
 const DEFAULT_RIGHT_PANEL_WIDTH = 360
+const MIN_PREVIEW_BOX_HEIGHT = 170
+const MAX_PREVIEW_BOX_HEIGHT = 560
+const DEFAULT_PREVIEW_BOX_HEIGHT = 220
 const MIN_ATLAS_PANEL_HEIGHT = 150
 const MAX_ATLAS_PANEL_HEIGHT = 360
 const DEFAULT_ATLAS_PANEL_HEIGHT = 240
-const DEFAULT_PREVIEW_BACKGROUND = '#1f2a2d'
+const DEFAULT_PREVIEW_BACKGROUND = '#222631'
+const DEFAULT_EDITOR_BACKGROUND = '#1d2028'
 
 function getFirstPaintColorId(project: SpriteProject): string {
   return project.palette.find((color) => !color.isTransparent)?.id ?? project.palette[0]?.id ?? ''
-}
-
-function formatAssetType(assetType: SpriteAssetType | undefined): string {
-  return assetType ? ASSET_TYPE_LABELS[assetType] : ASSET_TYPE_LABELS.custom
 }
 
 function getDefaultPatchInstruction(project: SpriteProject): string {
@@ -239,6 +209,10 @@ function parseTagsInput(value: string): string[] {
   return Array.from(tags.values())
 }
 
+function normalizeModelName(model: string): string {
+  return model.trim()
+}
+
 function tagsEqual(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((tag, index) => tag === right[index])
 }
@@ -256,6 +230,14 @@ function formatProviderDetails(title: string, details: Record<string, unknown>):
 }
 
 function formatErrorForDetails(error: unknown): Record<string, unknown> {
+  if (error instanceof OllamaDraftQualityError) {
+    return {
+      name: error.name,
+      message: error.message,
+      attempts: formatDraftQualityAttempts(error.attempts as Array<OllamaDraftQualityAttempt<unknown>>),
+    }
+  }
+
   if (error instanceof Error) {
     return {
       name: error.name,
@@ -436,6 +418,8 @@ function App() {
   const [appMode, setAppMode] = useState<AppMode>('start')
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('frame')
   const [dockTab, setDockTab] = useState<DockTab>('palette')
+  const [paletteEditorOpen, setPaletteEditorOpen] = useState(false)
+  const [autoOpenPaletteColorId, setAutoOpenPaletteColorId] = useState<string | null>(null)
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('frame')
   const [selectedAnimationId, setSelectedAnimationId] = useState(project.metadata.defaultAnimationId)
   const selectedAnimation = getAnimation(project, selectedAnimationId) ?? project.animations[0]
@@ -462,24 +446,23 @@ function App() {
   const [isPlaying, setIsPlaying] = useState(true)
   const [previewIndex, setPreviewIndex] = useState(0)
   const [rightPanelWidth, setRightPanelWidth] = useState(DEFAULT_RIGHT_PANEL_WIDTH)
+  const [previewBoxHeight, setPreviewBoxHeight] = useState(DEFAULT_PREVIEW_BOX_HEIGHT)
   const [atlasPanelHeight, setAtlasPanelHeight] = useState(DEFAULT_ATLAS_PANEL_HEIGHT)
   const [useSolidPreviewBackground, setUseSolidPreviewBackground] = useState(false)
   const [previewBackgroundColor, setPreviewBackgroundColor] = useState(DEFAULT_PREVIEW_BACKGROUND)
-  const [providerChoice, setProviderChoice] = useState<ProviderChoice>('ollama')
+  const [useSolidEditorBackground, setUseSolidEditorBackground] = useState(false)
+  const [editorBackgroundColor, setEditorBackgroundColor] = useState(DEFAULT_EDITOR_BACKGROUND)
   const [assetOutputContext, setAssetOutputContext] = useState<SpriteWriteAssetOutputContext>('auto')
   const [viewAngleContext, setViewAngleContext] = useState<SpriteWriteViewAngleContext>('auto')
   const [instruction, setInstruction] = useState(() => getDefaultPatchInstruction(project))
   const [proposedPatch, setProposedPatch] = useState<PixelPatchOperation[]>([])
-  const [disabledPatchOperationIndexes, setDisabledPatchOperationIndexes] = useState<Set<number>>(
-    () => new Set(),
-  )
-  const [patchErrors, setPatchErrors] = useState<string[]>([])
   const [importErrors, setImportErrors] = useState<string[]>([])
   const [providerMessage, setProviderMessage] = useState('')
   const [providerDetails, setProviderDetails] = useState('')
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [ollamaBaseUrl, setOllamaBaseUrl] = useState('http://localhost:11434')
   const [ollamaModel, setOllamaModel] = useState('llama3.2')
+  const activeOllamaModel = normalizeModelName(ollamaModel)
   const [ollamaModels, setOllamaModels] = useState<OllamaModelInfo[]>([])
   const [isOllamaBusy, setIsOllamaBusy] = useState(false)
   const [exportScale, setExportScale] = useState(1)
@@ -493,7 +476,7 @@ function App() {
   const [newProjectWidth, setNewProjectWidth] = useState(32)
   const [newProjectHeight, setNewProjectHeight] = useState(32)
   const [newProjectAssetType, setNewProjectAssetType] = useState<SpriteAssetType>('custom')
-  const ollamaModelSuitabilityNote = getOllamaModelSuitabilityNote(ollamaModel)
+  const ollamaModelSuitabilityNote = getOllamaModelSuitabilityNote(activeOllamaModel)
   const spriteWritePromptIntent = useMemo(
     () =>
       createSpriteWritePromptIntent(instruction, project, {
@@ -502,8 +485,8 @@ function App() {
       }),
     [assetOutputContext, instruction, project, viewAngleContext],
   )
-  const selectedInstalledOllamaModel = ollamaModels.some((model) => model.name === ollamaModel)
-    ? ollamaModel
+  const selectedInstalledOllamaModel = ollamaModels.some((model) => model.name === activeOllamaModel)
+    ? activeOllamaModel
     : ''
   const importInputRef = useRef<HTMLInputElement | null>(null)
   const layerNameInputRef = useRef<HTMLInputElement | null>(null)
@@ -540,10 +523,7 @@ function App() {
   const previewFrameNumber = frameIds.length ? (previewIndex % frameIds.length) + 1 : 0
   const previewFrame = getFrame(project, previewFrameId)
   const fps = selectedAnimation.fps
-  const activeProposedPatch = useMemo(
-    () => proposedPatch.filter((_, index) => !disabledPatchOperationIndexes.has(index)),
-    [disabledPatchOperationIndexes, proposedPatch],
-  )
+  const activeProposedPatch = proposedPatch
   const patchValidation = useMemo(
     () =>
       activeProposedPatch.length
@@ -551,17 +531,6 @@ function App() {
         : { valid: true, errors: [] },
     [activeProposedPatch, project, selectedAnimation.id, selectedFrameId, selectedLayerId],
   )
-  const proposedPreviewProject = useMemo(() => {
-    if (!activeProposedPatch.length || !patchValidation.valid) {
-      return undefined
-    }
-
-    try {
-      return applyPatch(project, selectedAnimation.id, selectedFrameId, selectedLayerId, activeProposedPatch)
-    } catch {
-      return undefined
-    }
-  }, [activeProposedPatch, patchValidation.valid, project, selectedAnimation.id, selectedFrameId, selectedLayerId])
   const animationStripLayout = useMemo(
     () =>
       createSpriteSheetLayout(project, selectedAnimation.id, {
@@ -709,7 +678,6 @@ function App() {
     }
 
     didAutoRefreshOllamaRef.current = true
-    setProviderChoice('ollama')
     setProviderMessage(`Checking local Ollama at ${ollamaBaseUrl}...`)
     setProviderDetails('')
     setIsOllamaBusy(true)
@@ -717,8 +685,8 @@ function App() {
     listOllamaModels(ollamaBaseUrl)
       .then((models) => {
         setOllamaModels(models)
-        const selectedModel = models.some((model) => model.name === ollamaModel)
-          ? ollamaModel
+        const selectedModel = models.some((model) => model.name === activeOllamaModel)
+          ? activeOllamaModel
           : choosePreferredOllamaModel(models)?.name
         if (selectedModel) {
           setOllamaModel(selectedModel)
@@ -733,7 +701,7 @@ function App() {
         setProviderDetails(
           formatProviderDetails('Ollama model refresh result', {
             baseUrl: ollamaBaseUrl,
-            selectedModel: selectedModel ?? ollamaModel,
+            selectedModel: selectedModel ?? activeOllamaModel,
             modelCount: models.length,
             models,
             automatic: true,
@@ -751,7 +719,7 @@ function App() {
         )
       })
       .finally(() => setIsOllamaBusy(false))
-  }, [ollamaBaseUrl, ollamaModel])
+  }, [ollamaBaseUrl, activeOllamaModel])
 
   useEffect(() => {
     try {
@@ -770,8 +738,6 @@ function App() {
 
   function clearPatchProposalState() {
     setProposedPatch([])
-    setDisabledPatchOperationIndexes(new Set())
-    setPatchErrors([])
   }
 
   function selectFrameForEditing(
@@ -794,7 +760,7 @@ function App() {
     setSelectedAtlasFrameIds((current) => {
       if (
         options.range &&
-        selectedAnimationId === animationId &&
+        selectedAnimation.id === animationId &&
         atlasSelectionAnchorId &&
         animation.frameIds.includes(atlasSelectionAnchorId)
       ) {
@@ -805,7 +771,7 @@ function App() {
       }
 
       if (options.toggle) {
-        const next = selectedAnimationId === animationId ? new Set(current) : new Set<FrameId>()
+        const next = selectedAnimation.id === animationId ? new Set(current) : new Set<FrameId>()
         if (next.has(frameId) && next.size > 1) {
           next.delete(frameId)
         } else {
@@ -1026,8 +992,6 @@ function App() {
     setTool('paint')
     setPreviewIndex(0)
     setProposedPatch([])
-    setDisabledPatchOperationIndexes(new Set())
-    setPatchErrors([])
     setImportErrors([])
     setProviderMessage(message)
     setAppMode('editor')
@@ -1082,8 +1046,6 @@ function App() {
     commitProject(applyPatch(project, selectedAnimation.id, selectedFrameId, selectedLayerId, [operation]))
     setLastPaintKey(`${tool}:${selectedColorId}:${key}`)
     setProposedPatch([])
-    setDisabledPatchOperationIndexes(new Set())
-    setPatchErrors([])
   }
 
   function undo() {
@@ -1186,45 +1148,7 @@ function App() {
     })
   }
 
-  async function generateMockPatch() {
-    setProviderMessage('')
-    setProviderDetails('')
-    try {
-      const patch = await mockProvider.requestPatch({
-        project,
-        animationId: selectedAnimation.id,
-        frameId: selectedFrameId,
-        layerId: selectedLayerId,
-        instruction,
-        constraints: { selectedColorId, maxOperations: 16 },
-      })
-      const validation = validatePatch(project, selectedAnimation.id, selectedFrameId, selectedLayerId, patch)
-      setProposedPatch(patch)
-      setDisabledPatchOperationIndexes(new Set())
-      setPatchErrors(validation.errors)
-      setProviderDetails(
-        formatProviderDetails('Mock edit result', {
-          instruction,
-          validationErrors: validation.errors,
-          patch,
-        }),
-      )
-    } catch (error) {
-      setProposedPatch([])
-      setDisabledPatchOperationIndexes(new Set())
-      setPatchErrors([])
-      setProviderMessage(error instanceof Error ? error.message : 'Mock provider failed.')
-      setProviderDetails(
-        formatProviderDetails('Mock provider error', {
-          instruction,
-          error: formatErrorForDetails(error),
-        }),
-      )
-    }
-  }
-
   async function generateOllamaPatch() {
-    setProviderChoice('ollama')
     const attemptContext: ProviderAttemptContext = {
       attempt: ollamaAttemptRef.current + 1,
       startedAt: performance.now(),
@@ -1236,14 +1160,14 @@ function App() {
     }
 
     setProviderMessage(
-      `Attempt ${attemptContext.attempt}: ${spriteWritePromptIntent.summary} Asking Ollama model "${ollamaModel}" for editable JSON...${
+      `Attempt ${attemptContext.attempt}: ${spriteWritePromptIntent.summary} Asking Ollama model "${activeOllamaModel}" for editable JSON...${
         ollamaModelSuitabilityNote ? ` ${ollamaModelSuitabilityNote}` : ''
       }`,
     )
     setProviderDetails('')
     setIsOllamaBusy(true)
     try {
-      const provider = new OllamaPatchProvider({ baseUrl: ollamaBaseUrl, model: ollamaModel })
+      const provider = new OllamaPatchProvider({ baseUrl: ollamaBaseUrl, model: activeOllamaModel })
       const maxOperations =
         spriteWritePromptIntent.mode === 'frame-draft' ? getMaxOllamaDraftOperations(project) : 24
       const patch = await provider.requestPatch({
@@ -1256,8 +1180,6 @@ function App() {
       })
       const validation = validatePatch(project, selectedAnimation.id, selectedFrameId, selectedLayerId, patch)
       setProposedPatch(patch)
-      setDisabledPatchOperationIndexes(new Set())
-      setPatchErrors(validation.errors)
       setProviderDetails(
         formatProviderDetails('Ollama frame edit response', {
           attempt: attemptContext.attempt,
@@ -1266,7 +1188,7 @@ function App() {
           userInstruction: spriteWritePromptIntent.userInstruction,
           paddedInstruction: spriteWritePromptIntent.paddedInstruction,
           baseUrl: ollamaBaseUrl,
-          model: ollamaModel,
+          model: activeOllamaModel,
           maxOperations,
           validationErrors: validation.errors,
           patch,
@@ -1285,8 +1207,6 @@ function App() {
       )
     } catch (error) {
       setProposedPatch([])
-      setDisabledPatchOperationIndexes(new Set())
-      setPatchErrors([])
       setProviderMessage(formatOllamaError(error, ollamaBaseUrl))
       setProviderDetails(
         formatProviderDetails('Ollama frame edit error', {
@@ -1296,7 +1216,7 @@ function App() {
           userInstruction: spriteWritePromptIntent.userInstruction,
           paddedInstruction: spriteWritePromptIntent.paddedInstruction,
           baseUrl: ollamaBaseUrl,
-          model: ollamaModel,
+          model: activeOllamaModel,
           error: formatErrorForDetails(error),
         }),
       )
@@ -1313,23 +1233,49 @@ function App() {
     },
   ) {
     ollamaAttemptRef.current = Math.max(ollamaAttemptRef.current, attemptContext.attempt)
-    setProviderChoice('ollama')
     setProviderMessage(
-      `Attempt ${attemptContext.attempt}: ${intent.summary} Asking Ollama model "${ollamaModel}" for structured editable frames...${
+      `Attempt ${attemptContext.attempt}: ${intent.summary} Asking Ollama model "${activeOllamaModel}" for structured editable frames...${
         ollamaModelSuitabilityNote ? ` ${ollamaModelSuitabilityNote}` : ''
       }`,
     )
     setProposedPatch([])
-    setDisabledPatchOperationIndexes(new Set())
-    setPatchErrors([])
     setProviderDetails('')
     setIsOllamaBusy(true)
 
     try {
-      const provider = new OllamaPatchProvider({ baseUrl: ollamaBaseUrl, model: ollamaModel })
+      const provider = new OllamaPatchProvider({ baseUrl: ollamaBaseUrl, model: activeOllamaModel })
       const maxDraftOperations = getMaxOllamaDraftOperations(project)
       if (intent.variationCount > 1) {
-        const setDraft = await provider.requestAnimationSetDraft({
+        const result = await requestImprovedAnimationSetDraft(
+          provider,
+          {
+            project,
+            animationId: selectedAnimation.id,
+            frameId: selectedFrameId,
+            layerId: selectedLayerId,
+            instruction: intent.paddedInstruction,
+            constraints: { selectedColorId, maxOperations: maxDraftOperations },
+            frameCount: intent.frameCount,
+            variationCount: intent.variationCount,
+          },
+          {
+            project,
+            animationId: selectedAnimation.id,
+            frameId: selectedFrameId,
+            layerId: selectedLayerId,
+            userInstruction: intent.userInstruction,
+            requestedFrameCount: intent.frameCount,
+            requestedVariationCount: intent.variationCount,
+            allowDistributed: allowsDistributedDraft(intent),
+          },
+        )
+        applyOllamaAnimationSetDraft(result.draft, intent.userInstruction, intent, attemptContext, result.attempts)
+        return
+      }
+
+      const result = await requestImprovedAnimationDraft(
+        provider,
+        {
           project,
           animationId: selectedAnimation.id,
           frameId: selectedFrameId,
@@ -1337,26 +1283,20 @@ function App() {
           instruction: intent.paddedInstruction,
           constraints: { selectedColorId, maxOperations: maxDraftOperations },
           frameCount: intent.frameCount,
-          variationCount: intent.variationCount,
-        })
-        applyOllamaAnimationSetDraft(setDraft, intent.userInstruction, intent, attemptContext)
-        return
-      }
-
-      const draft = await provider.requestAnimationDraft({
-        project,
-        animationId: selectedAnimation.id,
-        frameId: selectedFrameId,
-        layerId: selectedLayerId,
-        instruction: intent.paddedInstruction,
-        constraints: { selectedColorId, maxOperations: maxDraftOperations },
-        frameCount: intent.frameCount,
-      })
-      applyOllamaAnimationDraft(draft, intent.userInstruction, intent, attemptContext)
+        },
+        {
+          project,
+          animationId: selectedAnimation.id,
+          frameId: selectedFrameId,
+          layerId: selectedLayerId,
+          userInstruction: intent.userInstruction,
+          requestedFrameCount: intent.frameCount,
+          allowDistributed: allowsDistributedDraft(intent),
+        },
+      )
+      applyOllamaAnimationDraft(result.draft, intent.userInstruction, intent, attemptContext, result.attempts)
     } catch (error) {
       setProposedPatch([])
-      setDisabledPatchOperationIndexes(new Set())
-      setPatchErrors([])
       setProviderMessage(formatOllamaError(error, ollamaBaseUrl))
       setProviderDetails(
         formatProviderDetails('Ollama animation draft error', {
@@ -1367,7 +1307,7 @@ function App() {
           paddedInstruction: intent.paddedInstruction,
           requestedFrameCount: intent.frameCount,
           baseUrl: ollamaBaseUrl,
-          model: ollamaModel,
+          model: activeOllamaModel,
           error: formatErrorForDetails(error),
         }),
       )
@@ -1424,6 +1364,7 @@ function App() {
       attempt: ollamaAttemptRef.current,
       startedAt: performance.now(),
     },
+    qualityAttempts: Array<OllamaDraftQualityAttempt<OllamaAnimationDraft>> = [],
   ) {
     if (!selectedFrame) {
       setProviderMessage('Cannot draft animation because no frame is selected.')
@@ -1432,6 +1373,7 @@ function App() {
           attempt: attemptContext.attempt,
           elapsedMs: formatElapsedMs(attemptContext.startedAt),
           reason: 'No selected frame.',
+          qualityAttempts: formatDraftQualityAttempts(qualityAttempts),
           draft,
         }),
       )
@@ -1447,6 +1389,7 @@ function App() {
           reason: 'Frame count outside supported MVP range.',
           receivedFrameCount: draft.frames.length,
           requestedFrameCount: intent.frameCount,
+          qualityAttempts: formatDraftQualityAttempts(qualityAttempts),
           draft,
         }),
       )
@@ -1459,7 +1402,6 @@ function App() {
     let nextProject = cloneProject(project)
     const paletteMerge = mergeDraftPaletteAdditions(nextProject, draft.paletteAdditions)
     if (paletteMerge.errors.length) {
-      setPatchErrors(paletteMerge.errors)
       setProviderMessage(
         `Attempt ${attemptContext.attempt} completed in ${formatElapsedMs(
           attemptContext.startedAt,
@@ -1473,6 +1415,7 @@ function App() {
           userInstruction: intent.userInstruction,
           paddedInstruction: intent.paddedInstruction,
           validationErrors: paletteMerge.errors,
+          qualityAttempts: formatDraftQualityAttempts(qualityAttempts),
           draft,
         }),
       )
@@ -1536,7 +1479,6 @@ function App() {
     })
 
     if (errors.length) {
-      setPatchErrors(errors)
       setProviderMessage(
         `Attempt ${attemptContext.attempt} completed in ${formatElapsedMs(
           attemptContext.startedAt,
@@ -1554,8 +1496,9 @@ function App() {
           requestedFrameCount: intent.frameCount,
           receivedFrameCount: draft.frames.length,
           baseUrl: ollamaBaseUrl,
-          model: ollamaModel,
+          model: activeOllamaModel,
           validationErrors: errors,
+          qualityAttempts: formatDraftQualityAttempts(qualityAttempts),
           draft,
         }),
       )
@@ -1576,8 +1519,6 @@ function App() {
     setPreviewIndex(0)
     setWorkspaceMode('frame')
     setProposedPatch([])
-    setDisabledPatchOperationIndexes(new Set())
-    setPatchErrors([])
     setProviderMessage(
       `Attempt ${attemptContext.attempt} completed in ${formatElapsedMs(
         attemptContext.startedAt,
@@ -1595,6 +1536,7 @@ function App() {
         requestedFrameCount: intent.frameCount,
         createdFrameIds,
         animationName: animation.name,
+        qualityAttempts: formatDraftQualityAttempts(qualityAttempts),
         draft,
       }),
     )
@@ -1608,6 +1550,7 @@ function App() {
       attempt: ollamaAttemptRef.current,
       startedAt: performance.now(),
     },
+    qualityAttempts: Array<OllamaDraftQualityAttempt<OllamaAnimationSetDraft>> = [],
   ) {
     if (!selectedFrame) {
       setProviderMessage('Cannot draft animation set because no frame is selected.')
@@ -1616,6 +1559,7 @@ function App() {
           attempt: attemptContext.attempt,
           elapsedMs: formatElapsedMs(attemptContext.startedAt),
           reason: 'No selected frame.',
+          qualityAttempts: formatDraftQualityAttempts(qualityAttempts),
           setDraft,
         }),
       )
@@ -1629,6 +1573,7 @@ function App() {
           attempt: attemptContext.attempt,
           elapsedMs: formatElapsedMs(attemptContext.startedAt),
           reason: 'No animations returned.',
+          qualityAttempts: formatDraftQualityAttempts(qualityAttempts),
           setDraft,
         }),
       )
@@ -1643,7 +1588,6 @@ function App() {
       setDraft.animations.flatMap((animationDraft) => animationDraft.paletteAdditions ?? []),
     )
     if (paletteMerge.errors.length) {
-      setPatchErrors(paletteMerge.errors)
       setProviderMessage(
         `Attempt ${attemptContext.attempt} completed in ${formatElapsedMs(
           attemptContext.startedAt,
@@ -1657,6 +1601,7 @@ function App() {
           userInstruction: intent.userInstruction,
           paddedInstruction: intent.paddedInstruction,
           validationErrors: paletteMerge.errors,
+          qualityAttempts: formatDraftQualityAttempts(qualityAttempts),
           setDraft,
         }),
       )
@@ -1752,7 +1697,6 @@ function App() {
     }
 
     if (errors.length) {
-      setPatchErrors(errors)
       setProviderMessage(
         `Attempt ${attemptContext.attempt} completed in ${formatElapsedMs(
           attemptContext.startedAt,
@@ -1770,8 +1714,9 @@ function App() {
           requestedFrameCount: intent.frameCount,
           requestedVariationCount: intent.variationCount,
           baseUrl: ollamaBaseUrl,
-          model: ollamaModel,
+          model: activeOllamaModel,
           validationErrors: errors,
+          qualityAttempts: formatDraftQualityAttempts(qualityAttempts),
           setDraft,
         }),
       )
@@ -1796,8 +1741,6 @@ function App() {
     setPreviewIndex(0)
     setWorkspaceMode('sheet')
     setProposedPatch([])
-    setDisabledPatchOperationIndexes(new Set())
-    setPatchErrors([])
     setProviderMessage(
       `Attempt ${attemptContext.attempt} completed in ${formatElapsedMs(
         attemptContext.startedAt,
@@ -1816,21 +1759,24 @@ function App() {
         requestedVariationCount: intent.variationCount,
         createdAnimationIds,
         createdFrameIds,
+        qualityAttempts: formatDraftQualityAttempts(qualityAttempts),
         setDraft,
       }),
     )
   }
 
   async function refreshOllamaModels() {
-    setProviderChoice('ollama')
     setProviderMessage(`Checking Ollama at ${ollamaBaseUrl}...`)
     setProviderDetails('')
     setIsOllamaBusy(true)
     try {
       const models = await listOllamaModels(ollamaBaseUrl)
       setOllamaModels(models)
-      if (models.length && !models.some((model) => model.name === ollamaModel)) {
-        setOllamaModel(choosePreferredOllamaModel(models)?.name ?? models[0].name)
+      const selectedModel = models.length && !models.some((model) => model.name === activeOllamaModel)
+        ? choosePreferredOllamaModel(models)?.name ?? models[0].name
+        : activeOllamaModel
+      if (selectedModel) {
+        setOllamaModel(selectedModel)
       }
       setProviderMessage(
         models.length
@@ -1842,7 +1788,7 @@ function App() {
       setProviderDetails(
         formatProviderDetails('Ollama model refresh result', {
           baseUrl: ollamaBaseUrl,
-          selectedModel: ollamaModel,
+          selectedModel,
           modelCount: models.length,
           models,
         }),
@@ -1861,19 +1807,18 @@ function App() {
   }
 
   async function downloadOllamaModel() {
-    setProviderChoice('ollama')
-    setProviderMessage(`Downloading Ollama model "${ollamaModel}"...`)
+    setProviderMessage(`Downloading Ollama model "${activeOllamaModel}"...`)
     setProviderDetails('')
     setIsOllamaBusy(true)
     try {
-      const message = await pullOllamaModel(ollamaBaseUrl, ollamaModel)
+      const message = await pullOllamaModel(ollamaBaseUrl, activeOllamaModel)
       const models = await listOllamaModels(ollamaBaseUrl)
       setOllamaModels(models)
       setProviderMessage(`${message} Ready for structured edit requests.`)
       setProviderDetails(
         formatProviderDetails('Ollama model download result', {
           baseUrl: ollamaBaseUrl,
-          downloadedModel: ollamaModel,
+          downloadedModel: activeOllamaModel,
           modelCount: models.length,
           models,
         }),
@@ -1883,7 +1828,7 @@ function App() {
       setProviderDetails(
         formatProviderDetails('Ollama model download error', {
           baseUrl: ollamaBaseUrl,
-          model: ollamaModel,
+          model: activeOllamaModel,
           error: formatErrorForDetails(error),
         }),
       )
@@ -1901,7 +1846,6 @@ function App() {
       activeProposedPatch,
     )
     if (!validation.valid) {
-      setPatchErrors(validation.errors)
       setProviderDetails(
         formatProviderDetails('Edit apply blocked by validation', {
           validationErrors: validation.errors,
@@ -1912,47 +1856,14 @@ function App() {
     }
     commitProject(applyPatch(project, selectedAnimation.id, selectedFrameId, selectedLayerId, activeProposedPatch))
     setProposedPatch([])
-    setDisabledPatchOperationIndexes(new Set())
-    setPatchErrors([])
     setProviderMessage('Edit applied.')
     setProviderDetails('')
   }
 
   function rejectPatch() {
     setProposedPatch([])
-    setDisabledPatchOperationIndexes(new Set())
-    setPatchErrors([])
     setProviderMessage('Edit rejected.')
     setProviderDetails('')
-  }
-
-  function removeProposedPatchOperation(index: number) {
-    setProposedPatch((patch) => patch.filter((_, operationIndex) => operationIndex !== index))
-    setDisabledPatchOperationIndexes((current) => {
-      const next = new Set<number>()
-      current.forEach((disabledIndex) => {
-        if (disabledIndex < index) {
-          next.add(disabledIndex)
-        } else if (disabledIndex > index) {
-          next.add(disabledIndex - 1)
-        }
-      })
-      return next
-    })
-    setPatchErrors([])
-  }
-
-  function toggleProposedPatchOperation(index: number) {
-    setDisabledPatchOperationIndexes((current) => {
-      const next = new Set(current)
-      if (next.has(index)) {
-        next.delete(index)
-      } else {
-        next.add(index)
-      }
-      return next
-    })
-    setPatchErrors([])
   }
 
   function runCommand(command: CommandItem) {
@@ -2058,15 +1969,45 @@ function App() {
         clampNumber(startWidth - (moveEvent.clientX - startX), MIN_RIGHT_PANEL_WIDTH, MAX_RIGHT_PANEL_WIDTH),
       )
     }
-    const onPointerUp = () => {
+    const stopPointerMove = () => {
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
       window.removeEventListener('pointermove', onPointerMove)
-      window.removeEventListener('pointerup', onPointerUp)
+      window.removeEventListener('pointerup', stopPointerMove)
+      window.removeEventListener('pointercancel', stopPointerMove)
     }
 
     window.addEventListener('pointermove', onPointerMove)
-    window.addEventListener('pointerup', onPointerUp, { once: true })
+    window.addEventListener('pointerup', stopPointerMove, { once: true })
+    window.addEventListener('pointercancel', stopPointerMove)
+  }
+
+  function beginPreviewBoxResize(event: ReactPointerEvent<HTMLButtonElement>) {
+    event.preventDefault()
+    const startX = event.clientX
+    const startY = event.clientY
+    const startWidth = rightPanelWidth
+    const startHeight = previewBoxHeight
+    document.body.style.cursor = 'nwse-resize'
+    document.body.style.userSelect = 'none'
+
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      setRightPanelWidth(clampNumber(startWidth + (moveEvent.clientX - startX), MIN_RIGHT_PANEL_WIDTH, MAX_RIGHT_PANEL_WIDTH))
+      setPreviewBoxHeight(
+        clampNumber(startHeight + (moveEvent.clientY - startY), MIN_PREVIEW_BOX_HEIGHT, MAX_PREVIEW_BOX_HEIGHT),
+      )
+    }
+    const stopPointerMove = () => {
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', stopPointerMove)
+      window.removeEventListener('pointercancel', stopPointerMove)
+    }
+
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', stopPointerMove, { once: true })
+    window.addEventListener('pointercancel', stopPointerMove)
   }
 
   function beginAtlasPanelResize(event: ReactPointerEvent<HTMLButtonElement>) {
@@ -2081,15 +2022,17 @@ function App() {
         clampNumber(startHeight - (moveEvent.clientY - startY), MIN_ATLAS_PANEL_HEIGHT, MAX_ATLAS_PANEL_HEIGHT),
       )
     }
-    const onPointerUp = () => {
+    const stopPointerMove = () => {
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
       window.removeEventListener('pointermove', onPointerMove)
-      window.removeEventListener('pointerup', onPointerUp)
+      window.removeEventListener('pointerup', stopPointerMove)
+      window.removeEventListener('pointercancel', stopPointerMove)
     }
 
     window.addEventListener('pointermove', onPointerMove)
-    window.addEventListener('pointerup', onPointerUp, { once: true })
+    window.addEventListener('pointerup', stopPointerMove, { once: true })
+    window.addEventListener('pointercancel', stopPointerMove)
   }
 
   function saveSelectedFrameProperties() {
@@ -2341,13 +2284,13 @@ function App() {
     setProviderMessage(`Applied ${preset.label} layer preset.`)
   }
 
-  function saveSelectedColor() {
+  function saveSelectedColor(overrides: { name?: string; hex?: string } = {}) {
     if (!selectedColor || selectedColor.isTransparent) {
       return
     }
 
-    const name = colorNameInputRef.current?.value ?? selectedColor.name
-    const hex = colorHexInputRef.current?.value ?? selectedColor.hex
+    const name = overrides.name ?? colorNameInputRef.current?.value ?? selectedColor.name
+    const hex = overrides.hex ?? colorHexInputRef.current?.value ?? selectedColor.hex
     if (name.trim() === selectedColor.name && hex.trim() === selectedColor.hex) {
       return
     }
@@ -2359,7 +2302,7 @@ function App() {
           hex: hex.trim(),
         }),
       )
-      setProviderMessage(`Updated palette color "${selectedColor.id}".`)
+      setProviderMessage('Updated palette color "' + selectedColor.id + '".')
     } catch (error) {
       setProviderMessage(error instanceof Error ? error.message : 'Palette color update failed.')
     }
@@ -2375,6 +2318,9 @@ function App() {
     commitProject(nextProject)
     setSelectedColorId(id)
     setTool('paint')
+    setDockTab('palette')
+    setPaletteEditorOpen(true)
+    setAutoOpenPaletteColorId(id)
   }
 
   function deleteSelectedPaletteColor() {
@@ -2497,12 +2443,6 @@ function App() {
       label: 'Add animation',
       description: 'Create another animation track for this asset.',
       run: addAnimation,
-    },
-    {
-      id: 'patch-generate-mock',
-      label: 'Generate mock edit',
-      description: 'Ask the deterministic local mock provider for an editable change.',
-      run: generateMockPatch,
     },
     {
       id: 'patch-apply',
@@ -2650,14 +2590,8 @@ function App() {
           </p>
         </div>
         <div className="topbar-actions">
-          <button type="button" onClick={() => setIsCommandPaletteOpen(true)} title="Open command palette (Ctrl+K)">
-            Cmd
-          </button>
           <button type="button" onClick={() => setAppMode('start')}>
             Home
-          </button>
-          <button type="button" onClick={() => setAppMode('start')}>
-            New
           </button>
           <button type="button" onClick={() => importInputRef.current?.click()}>
             Import
@@ -2768,6 +2702,7 @@ function App() {
           {
             '--right-panel-width': `${rightPanelWidth}px`,
             '--atlas-panel-height': `${atlasPanelHeight}px`,
+            '--editor-background-color': editorBackgroundColor,
           } as CSSProperties
         }
       >
@@ -2783,16 +2718,6 @@ function App() {
                 onChange={(event) => setInstruction(event.target.value)}
                 placeholder="Hero wearing a cape. Standing animation."
               />
-            </label>
-            <label>
-              Provider
-              <select
-                value={providerChoice}
-                onChange={(event) => setProviderChoice(event.target.value as ProviderChoice)}
-              >
-                <option value="ollama">Ollama local</option>
-                <option value="mock">Mock local</option>
-              </select>
             </label>
             <div className="form-grid">
               <label>
@@ -2819,58 +2744,59 @@ function App() {
                 </select>
               </label>
             </div>
-            {providerChoice === 'ollama' ? (
-              <div className="ollama-settings">
-                <label>
-                  Ollama URL
-                  <input value={ollamaBaseUrl} onChange={(event) => setOllamaBaseUrl(event.target.value)} />
-                </label>
-                <label>
-                  Installed model
-                  <select
-                    value={selectedInstalledOllamaModel}
-                    onChange={(event) => setOllamaModel(event.target.value)}
-                    disabled={!ollamaModels.length}
-                  >
-                    <option value="" disabled>
-                      {ollamaModels.length ? 'Choose installed model' : 'Checking local models...'}
+            <div className="ollama-settings">
+              <label>
+                Ollama URL
+                <input value={ollamaBaseUrl} onChange={(event) => setOllamaBaseUrl(event.target.value)} />
+              </label>
+              <label>
+                Installed model
+                <select
+                  value={selectedInstalledOllamaModel}
+                  onChange={(event) => setOllamaModel(event.target.value)}
+                  disabled={!ollamaModels.length}
+                >
+                  <option value="" disabled>
+                    {ollamaModels.length ? 'Choose installed model' : 'Checking local models...'}
+                  </option>
+                  {ollamaModels.map((model) => (
+                    <option key={model.name} value={model.name}>
+                      {model.name}
+                      {model.parameterSize ? ` (${model.parameterSize})` : ''}
+                      {model.capabilities?.includes('vision') ? ' - vision' : ''}
                     </option>
-                    {ollamaModels.map((model) => (
-                      <option key={model.name} value={model.name}>
-                        {model.name}
-                        {model.parameterSize ? ` (${model.parameterSize})` : ''}
-                        {model.capabilities?.includes('vision') ? ' - vision' : ''}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                  ))}
+                </select>
+              </label>
                 <label>
                   Model name
                   <input
                     value={ollamaModel}
                     onChange={(event) => setOllamaModel(event.target.value)}
+                    onBlur={(event) => {
+                      const normalized = normalizeModelName(event.target.value)
+                      if (normalized !== ollamaModel) {
+                        setOllamaModel(normalized)
+                      }
+                    }}
                     placeholder="llama3.2"
                   />
                 </label>
-                {ollamaModelSuitabilityNote ? (
-                  <p className="status-line">{ollamaModelSuitabilityNote}</p>
-                ) : null}
-                <div className="button-stack">
-                  <button type="button" onClick={refreshOllamaModels} disabled={isOllamaBusy}>
-                    Refresh Models
-                  </button>
-                  <button type="button" onClick={downloadOllamaModel} disabled={isOllamaBusy}>
-                    Download Model
-                  </button>
-                </div>
+              {ollamaModelSuitabilityNote ? (
+                <p className="status-line">{ollamaModelSuitabilityNote}</p>
+              ) : null}
+              <div className="button-stack">
+                <button type="button" onClick={refreshOllamaModels} disabled={isOllamaBusy}>
+                  Refresh Models
+                </button>
+                <button type="button" onClick={downloadOllamaModel} disabled={isOllamaBusy}>
+                  Download Model
+                </button>
               </div>
-            ) : null}
+            </div>
             <div className="button-stack">
-              <button type="button" onClick={generateMockPatch}>
-                Generate Mock Edit
-              </button>
               <button type="button" onClick={generateOllamaPatch} disabled={isOllamaBusy}>
-                {isOllamaBusy && providerChoice === 'ollama'
+                {isOllamaBusy
                   ? 'Working...'
                   : spriteWritePromptIntent.mode === 'animation-draft'
                     ? spriteWritePromptIntent.variationCount > 1
@@ -2966,17 +2892,36 @@ function App() {
               ))}
             </div>
             {selectedColor && !selectedColor.isTransparent && tool === 'paint' ? (
-              <details className="advanced-panel">
+              <details
+                className="advanced-panel"
+                open={paletteEditorOpen}
+                onToggle={(event) => setPaletteEditorOpen(event.currentTarget.open)}
+              >
                 <summary>Edit Palette Color</summary>
                 <div className="palette-inspector">
-                  <label>
-                    Name
-                    <input
-                      key={`${selectedColor.id}-name`}
-                      ref={colorNameInputRef}
-                      defaultValue={selectedColor.name}
+                  <div className="palette-name-row">
+                    <label>
+                      Name
+                      <input
+                        key={selectedColor.id + '-name'}
+                        ref={colorNameInputRef}
+                        defaultValue={selectedColor.name}
+                      />
+                    </label>
+                    <ColorPickerField
+                      key={selectedColor.id + '-' + (autoOpenPaletteColorId === selectedColor.id ? 'auto' : 'manual')}
+                      label="Palette color"
+                      value={selectedColor.hex}
+                      initialOpen={autoOpenPaletteColorId === selectedColor.id}
+                      onClose={() => setAutoOpenPaletteColorId(null)}
+                      onChange={(nextColor) => {
+                        if (colorHexInputRef.current) {
+                          colorHexInputRef.current.value = nextColor
+                        }
+                        saveSelectedColor({ hex: nextColor })
+                      }}
                     />
-                  </label>
+                  </div>
                   <label>
                     Hex
                     <div className="inline-control">
@@ -2986,7 +2931,7 @@ function App() {
                         defaultValue={selectedColor.hex}
                         spellCheck={false}
                       />
-                      <button type="button" onClick={saveSelectedColor}>
+                      <button type="button" onClick={() => saveSelectedColor()}>
                         Save
                       </button>
                     </div>
@@ -3154,6 +3099,7 @@ function App() {
           onFrameDragStart={(animationId, frameId) => setDraggedAtlasFrame({ animationId, frameId })}
           onFrameDrop={dropAtlasFrame}
           onFrameDragEnd={() => setDraggedAtlasFrame(null)}
+          onAddFrame={addFrame}
           onDuplicateSelectedFrames={duplicateSelectedAtlasFrames}
           onDeleteSelectedFrames={deleteSelectedAtlasFrames}
           onSetSelectedDuration={setSelectedAtlasFrameDuration}
@@ -3228,6 +3174,22 @@ function App() {
                 />
                 Onion skin
               </label>
+              <div className="canvas-background-controls">
+                <label className="toggle-row">
+                  <input
+                    type="checkbox"
+                    checked={useSolidEditorBackground}
+                    onChange={(event) => setUseSolidEditorBackground(event.target.checked)}
+                  />
+                  Canvas background
+                </label>
+                <ColorPickerField
+                  label="Canvas background color"
+                  value={editorBackgroundColor}
+                  onChange={setEditorBackgroundColor}
+                  disabled={!useSolidEditorBackground}
+                />
+              </div>
             </div>
 
             <details className="animation-inspector">
@@ -3247,7 +3209,31 @@ function App() {
               </label>
             </details>
 
-            <div className="pixel-grid-scroll">
+            {proposedPatch.length ? (
+              <div className="canvas-proposal-bar" role="status">
+                <div>
+                  <strong>Proposed edit</strong>
+                  <span>
+                    {activeProposedPatch.length}/{proposedPatch.length} enabled
+                    {patchValidation.valid ? '' : ' - validation issues'}
+                  </span>
+                </div>
+                <div className="canvas-proposal-actions">
+                  <button
+                    type="button"
+                    onClick={applyProposedPatch}
+                    disabled={activeProposedPatch.length === 0 || !patchValidation.valid}
+                  >
+                    Apply Edit
+                  </button>
+                  <button type="button" onClick={rejectPatch}>
+                    Reject Edit
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            <div className={`pixel-grid-scroll ${useSolidEditorBackground ? 'solid-editor-background' : ''}`}>
               <div
                 className="pixel-grid"
                 style={{
@@ -3321,6 +3307,7 @@ function App() {
               style={
                 {
                   '--preview-background-color': previewBackgroundColor,
+                  height: previewBoxHeight,
                 } as CSSProperties
               }
             >
@@ -3328,6 +3315,13 @@ function App() {
                 project={project}
                 frameId={previewFrameId}
                 className={useSolidPreviewBackground ? 'solid-preview-background' : undefined}
+              />
+              <button
+                type="button"
+                className="preview-resize-corner"
+                aria-label="Resize preview"
+                title="Drag to resize preview"
+                onPointerDown={beginPreviewBoxResize}
               />
             </div>
             <div className="preview-controls">
@@ -3354,15 +3348,12 @@ function App() {
                 />
                 Solid preview background
               </label>
-              <label>
-                Background
-                <input
-                  type="color"
-                  value={previewBackgroundColor}
-                  onChange={(event) => setPreviewBackgroundColor(event.target.value)}
-                  disabled={!useSolidPreviewBackground}
-                />
-              </label>
+              <ColorPickerField
+                label="Preview background color"
+                value={previewBackgroundColor}
+                onChange={setPreviewBackgroundColor}
+                disabled={!useSolidPreviewBackground}
+              />
             </div>
           </section>
 
@@ -3388,17 +3379,6 @@ function App() {
             <p className="status-line">
               Top strip controls sheet order. Edit this frame's metadata here.
             </p>
-            <div className="frame-actions">
-              <button type="button" onClick={addFrame}>
-                Add Frame
-              </button>
-              <button type="button" onClick={duplicateFrame}>
-                Duplicate Frame
-              </button>
-              <button type="button" onClick={deleteFrame} disabled={frameIds.length <= 1}>
-                Delete Frame
-              </button>
-            </div>
             {selectedFrame ? (
               <div className="frame-inspector">
                 <label>
@@ -3508,1047 +3488,13 @@ function App() {
             <p className="status-line">
               {selectedAnimation.name} / {frameIds.length} frame{frameIds.length === 1 ? '' : 's'} / {fps} FPS
             </p>
-            <div className="frame-actions">
-              <button type="button" onClick={addAnimation}>
-                Add Animation
-              </button>
-              <button type="button" onClick={duplicateSelectedAnimation}>
-                Duplicate
-              </button>
-              <button
-                type="button"
-                onClick={deleteSelectedAnimation}
-                disabled={project.animations.length <= 1}
-              >
-                Delete
-              </button>
-            </div>
             <p className="status-line">
               Rename, reorder, and switch animations from the canvas toolbar while drawing.
             </p>
           </section>
-
-          <details className="optional-panel">
-            <summary>
-              <span>
-                <strong>AI Assistant</strong>
-                <small>Optional structured edit proposals. Manual drawing and exports work without it.</small>
-              </span>
-            </summary>
-            <PatchAssistant
-              project={project}
-              proposedPreviewProject={proposedPreviewProject}
-              frameId={selectedFrameId}
-              providerChoice={providerChoice}
-              setProviderChoice={setProviderChoice}
-              instruction={instruction}
-              setInstruction={setInstruction}
-              assetOutputContext={assetOutputContext}
-              setAssetOutputContext={setAssetOutputContext}
-              viewAngleContext={viewAngleContext}
-              setViewAngleContext={setViewAngleContext}
-              proposedPatch={proposedPatch}
-              activeProposedPatch={activeProposedPatch}
-              disabledOperationIndexes={disabledPatchOperationIndexes}
-              patchErrors={[...patchErrors, ...patchValidation.errors]}
-              providerMessage={providerMessage}
-              providerDetails={providerDetails}
-              ollamaBaseUrl={ollamaBaseUrl}
-              setOllamaBaseUrl={setOllamaBaseUrl}
-              ollamaModel={ollamaModel}
-              setOllamaModel={setOllamaModel}
-              onGenerateMock={generateMockPatch}
-              onGenerateOllama={generateOllamaPatch}
-              onApply={applyProposedPatch}
-              onReject={rejectPatch}
-              onRemoveOperation={removeProposedPatchOperation}
-              onToggleOperation={toggleProposedPatchOperation}
-              canApply={activeProposedPatch.length > 0 && patchValidation.valid}
-              onTestOllama={async () => {
-                try {
-                  setProviderDetails('')
-                  const message = await testOllamaConnection(ollamaBaseUrl)
-                  setProviderMessage(message)
-                  setProviderDetails(
-                    formatProviderDetails('Ollama connection test result', {
-                      baseUrl: ollamaBaseUrl,
-                      message,
-                    }),
-                  )
-                } catch (error) {
-                  setProviderMessage(formatOllamaError(error, ollamaBaseUrl))
-                  setProviderDetails(
-                    formatProviderDetails('Ollama connection test error', {
-                      baseUrl: ollamaBaseUrl,
-                      error: formatErrorForDetails(error),
-                    }),
-                  )
-                }
-              }}
-            />
-          </details>
         </aside>
       </section>
     </main>
-  )
-}
-
-function StartScreen({
-  importErrors,
-  newProjectAssetType,
-  newProjectHeight,
-  newProjectName,
-  newProjectTemplateId,
-  newProjectWidth,
-  onCreateProject,
-  onImport,
-  onOpenCurrent,
-  onOpenDemo,
-  onSetAssetType,
-  onSetHeight,
-  onSetName,
-  onSetTemplate,
-  onSetWidth,
-  templates,
-}: {
-  importErrors: string[]
-  newProjectAssetType: SpriteAssetType
-  newProjectHeight: number
-  newProjectName: string
-  newProjectTemplateId: string
-  newProjectWidth: number
-  templates: typeof SPRITE_PROJECT_TEMPLATES
-  onCreateProject: () => void
-  onImport: () => void
-  onOpenCurrent: () => void
-  onOpenDemo: () => void
-  onSetAssetType: (assetType: SpriteAssetType) => void
-  onSetHeight: (height: number) => void
-  onSetName: (name: string) => void
-  onSetTemplate: (templateId: string) => void
-  onSetWidth: (width: number) => void
-}) {
-  return (
-    <section className="start-screen">
-      <div className="start-hero">
-        <p className="eyebrow">Local-first structured pixel asset workbench</p>
-        <h1>SpriteWrite</h1>
-        <p className="start-tagline">
-          Draw static or animated pixel assets on a fixed grid, preview the result, then export
-          clean PNGs, animation strips, full sprite sheets, matching metadata, and editable project JSON.
-        </p>
-      </div>
-
-      <div className="start-grid">
-        <section className="panel start-panel">
-          <h2>New Project</h2>
-          <label>
-            Project name
-            <input value={newProjectName} onChange={(event) => onSetName(event.target.value)} />
-          </label>
-          <label>
-            Template
-            <select value={newProjectTemplateId} onChange={(event) => onSetTemplate(event.target.value)}>
-              {templates.map((template) => (
-                <option key={template.id} value={template.id}>
-                  {template.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="form-grid">
-            <label>
-              Width
-              <input
-                min="1"
-                max="256"
-                type="number"
-                value={newProjectWidth}
-                onChange={(event) => onSetWidth(Number(event.target.value))}
-              />
-            </label>
-            <label>
-              Height
-              <input
-                min="1"
-                max="256"
-                type="number"
-                value={newProjectHeight}
-                onChange={(event) => onSetHeight(Number(event.target.value))}
-              />
-            </label>
-          </div>
-          <label>
-            Asset type
-            <select
-              value={newProjectAssetType}
-              onChange={(event) => onSetAssetType(event.target.value as SpriteAssetType)}
-            >
-              {ASSET_TYPE_OPTIONS.map((assetType) => (
-                <option key={assetType} value={assetType}>
-                  {formatAssetType(assetType)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="button-stack">
-            <button type="button" onClick={onCreateProject}>
-              New Project
-            </button>
-            <button type="button" onClick={onImport}>
-              Import Project JSON
-            </button>
-            <button type="button" onClick={onOpenCurrent}>
-              Open Current Project
-            </button>
-          </div>
-          {importErrors.length ? (
-            <div className="validation-errors">
-              {importErrors.map((error) => (
-                <p key={error}>{error}</p>
-              ))}
-            </div>
-          ) : null}
-        </section>
-
-        <section className="panel start-panel">
-          <h2>New From Template</h2>
-          <div className="template-list">
-            {templates.map((template) => (
-              <button
-                key={template.id}
-                type="button"
-                className={newProjectTemplateId === template.id ? 'template-card active' : 'template-card'}
-                onClick={() => onSetTemplate(template.id)}
-              >
-                <strong>{template.name}</strong>
-                <span>
-                  {formatAssetType(template.assetType)} / {template.width}x{template.height}
-                </span>
-                <span>{template.description}</span>
-              </button>
-            ))}
-          </div>
-          <button type="button" onClick={onOpenDemo}>
-            Open Hero Demo
-          </button>
-        </section>
-
-        <section className="panel start-panel">
-          <h2>Browser Draft</h2>
-          <p className="status-line">
-            SpriteWrite restores the last valid browser draft on load. This is a convenience, not a
-            project library.
-          </p>
-          <p className="status-line">
-            Project JSON is the editable source artifact. PNGs and metadata are production exports.
-          </p>
-        </section>
-      </div>
-    </section>
-  )
-}
-
-function CommandPalette({
-  commands,
-  isOpen,
-  query,
-  onClose,
-  onQueryChange,
-  onRunCommand,
-}: {
-  commands: CommandItem[]
-  isOpen: boolean
-  query: string
-  onClose: () => void
-  onQueryChange: (query: string) => void
-  onRunCommand: (command: CommandItem) => void
-}) {
-  const inputRef = useRef<HTMLInputElement | null>(null)
-  const normalizedQuery = query.trim().toLowerCase()
-  const filteredCommands = commands.filter((command) => {
-    const haystack = `${command.label} ${command.description} ${command.shortcut ?? ''}`.toLowerCase()
-    return haystack.includes(normalizedQuery)
-  })
-
-  useEffect(() => {
-    if (isOpen) {
-      window.setTimeout(() => inputRef.current?.focus(), 0)
-    }
-  }, [isOpen])
-
-  if (!isOpen) {
-    return null
-  }
-
-  return (
-    <div className="command-palette-backdrop" role="presentation" onMouseDown={onClose}>
-      <section
-        className="command-palette"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Command palette"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <div className="command-palette-header">
-          <div>
-            <h2>Commands</h2>
-            <p>Find editor actions, exports, frames, layers, and edit commands.</p>
-          </div>
-          <button type="button" onClick={onClose}>
-            Close
-          </button>
-        </div>
-        <input
-          ref={inputRef}
-          value={query}
-          placeholder="Search commands..."
-          onChange={(event) => onQueryChange(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') {
-              event.preventDefault()
-              onClose()
-            }
-
-            if (event.key === 'Enter') {
-              const firstEnabledCommand = filteredCommands.find((command) => !command.disabled)
-              if (firstEnabledCommand) {
-                event.preventDefault()
-                onRunCommand(firstEnabledCommand)
-              }
-            }
-          }}
-        />
-        <div className="command-list">
-          {filteredCommands.length ? (
-            filteredCommands.map((command) => (
-              <button
-                key={command.id}
-                type="button"
-                className="command-item"
-                onClick={() => onRunCommand(command)}
-                disabled={command.disabled}
-              >
-                <span>
-                  <strong>{command.label}</strong>
-                  <small>{command.description}</small>
-                </span>
-                {command.shortcut ? <kbd>{command.shortcut}</kbd> : null}
-              </button>
-            ))
-          ) : (
-            <p className="empty-state">No matching command.</p>
-          )}
-        </div>
-      </section>
-    </div>
-  )
-}
-
-function AtlasOverview({
-  project,
-  selectedAnimationId,
-  selectedFrameId,
-  selectedFrameIds,
-  draggedFrameId,
-  onSelectFrame,
-  onFrameDragStart,
-  onFrameDrop,
-  onFrameDragEnd,
-  onDuplicateSelectedFrames,
-  onDeleteSelectedFrames,
-  onSetSelectedDuration,
-  onSetSelectedTags,
-  onSetSelectedNotes,
-  workspaceMode,
-  onWorkspaceModeChange,
-  onResizeStart,
-}: {
-  project: SpriteProject
-  selectedAnimationId: AnimationId
-  selectedFrameId: FrameId
-  selectedFrameIds: Set<FrameId>
-  draggedFrameId?: FrameId
-  onSelectFrame: (
-    animationId: AnimationId,
-    frameId: FrameId,
-    options?: { range?: boolean; toggle?: boolean },
-  ) => void
-  onFrameDragStart: (animationId: AnimationId, frameId: FrameId) => void
-  onFrameDrop: (animationId: AnimationId, targetFrameId: FrameId) => void
-  onFrameDragEnd: () => void
-  onDuplicateSelectedFrames: () => void
-  onDeleteSelectedFrames: () => void
-  onSetSelectedDuration: (durationMs: number) => void
-  onSetSelectedTags: (tagsInput: string) => void
-  onSetSelectedNotes: (notes: string) => void
-  workspaceMode: WorkspaceMode
-  onWorkspaceModeChange: (mode: WorkspaceMode) => void
-  onResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void
-}) {
-  const durationInputRef = useRef<HTMLInputElement | null>(null)
-  const tagsInputRef = useRef<HTMLInputElement | null>(null)
-  const notesInputRef = useRef<HTMLTextAreaElement | null>(null)
-  const selectedAnimation = getAnimation(project, selectedAnimationId) ?? project.animations[0]
-  const selectedFrameIdList = selectedAnimation.frameIds.filter((frameId) => selectedFrameIds.has(frameId))
-  const selectedFrameCount = selectedFrameIdList.length || 1
-  const selectedFrames = (selectedFrameIdList.length ? selectedFrameIdList : [selectedFrameId])
-    .map((frameId) => getFrame(project, frameId))
-    .filter((frame): frame is SpriteFrame => Boolean(frame))
-  const selectedDurations = Array.from(new Set(selectedFrames.map((frame) => frame.durationMs)))
-  const durationInputDefault = selectedDurations.length === 1 ? selectedDurations[0] : selectedFrames[0]?.durationMs ?? 100
-  const selectedTagValues = Array.from(new Set(selectedFrames.map((frame) => (frame.tags ?? []).join(', '))))
-  const tagsInputDefault = selectedTagValues.length === 1 ? selectedTagValues[0] : ''
-  const selectedNoteValues = Array.from(new Set(selectedFrames.map((frame) => frame.notes ?? '')))
-  const notesInputDefault = selectedNoteValues.length === 1 ? selectedNoteValues[0] : ''
-  const canDeleteSelectedFrames = selectedAnimation.frameIds.length - selectedFrameCount >= 1
-
-  return (
-    <section className="atlas-overview" aria-label="Sprite atlas overview">
-      <button
-        type="button"
-        className="panel-resize-handle panel-resize-handle-horizontal"
-        aria-label="Resize sprite sheet rows panel"
-        title="Drag to resize sprite sheet rows"
-        onPointerDown={onResizeStart}
-      />
-      <div className="atlas-header">
-        <div>
-          <p className="eyebrow">Atlas</p>
-          <h2>Sprite Sheet Rows</h2>
-        </div>
-        <div className="atlas-actions">
-          <p className="status-line">
-            {selectedFrameCount} selected. Shift-click selects a range, ctrl/cmd-click toggles, drag reorders.
-          </p>
-          <div className="segmented workspace-mode-toggle" aria-label="Workspace view">
-            <button
-              type="button"
-              className={workspaceMode === 'frame' ? 'active' : ''}
-              onClick={() => onWorkspaceModeChange('frame')}
-            >
-              Edit Frame
-            </button>
-            <button
-              type="button"
-              className={workspaceMode === 'sheet' ? 'active' : ''}
-              onClick={() => onWorkspaceModeChange('sheet')}
-            >
-              Full Sheet
-            </button>
-          </div>
-          <div className="segmented">
-            <button type="button" onClick={onDuplicateSelectedFrames}>
-              Duplicate Selected
-            </button>
-            <button type="button" onClick={onDeleteSelectedFrames} disabled={!canDeleteSelectedFrames}>
-              Delete Selected
-            </button>
-          </div>
-          <details className="atlas-batch-details">
-            <summary>Batch Metadata</summary>
-            <div className="atlas-batch-metadata">
-              <label>
-                Duration ms
-                <input
-                  key={`${selectedAnimationId}-${selectedFrameId}-${selectedFrameCount}-${durationInputDefault}`}
-                  ref={durationInputRef}
-                  type="number"
-                  min="1"
-                  defaultValue={durationInputDefault}
-                />
-              </label>
-              <button
-                type="button"
-                onClick={() => onSetSelectedDuration(Number(durationInputRef.current?.value ?? durationInputDefault))}
-              >
-                Set Duration
-              </button>
-              {selectedDurations.length > 1 ? <span>Mixed timing</span> : null}
-              <label>
-                Tags
-                <input
-                  key={`${selectedAnimationId}-${selectedFrameId}-${selectedFrameCount}-tags-${tagsInputDefault}`}
-                  ref={tagsInputRef}
-                  defaultValue={tagsInputDefault}
-                  placeholder={selectedTagValues.length > 1 ? 'mixed tags' : 'idle, contact'}
-                />
-              </label>
-              <button
-                type="button"
-                onClick={() => onSetSelectedTags(tagsInputRef.current?.value ?? tagsInputDefault)}
-              >
-                Set Tags
-              </button>
-              {selectedTagValues.length > 1 ? <span>Mixed tags</span> : null}
-              <label className="atlas-notes-field">
-                Notes
-                <textarea
-                  key={`${selectedAnimationId}-${selectedFrameId}-${selectedFrameCount}-notes-${notesInputDefault}`}
-                  ref={notesInputRef}
-                  defaultValue={notesInputDefault}
-                  placeholder={selectedNoteValues.length > 1 ? 'mixed notes' : 'Frame note'}
-                />
-              </label>
-              <button
-                type="button"
-                onClick={() => onSetSelectedNotes(notesInputRef.current?.value ?? notesInputDefault)}
-              >
-                Set Notes
-              </button>
-              {selectedNoteValues.length > 1 ? <span>Mixed notes</span> : null}
-            </div>
-          </details>
-        </div>
-      </div>
-
-      <div className="atlas-row-list">
-        {project.animations.map((animation) => (
-          <div
-            key={animation.id}
-            className={`atlas-row ${selectedAnimationId === animation.id ? 'active' : ''}`}
-          >
-            <button
-              type="button"
-              className="atlas-row-label"
-              onClick={() => onSelectFrame(animation.id, animation.frameIds[0])}
-            >
-              <strong>{animation.name}</strong>
-              <span>
-                {animation.frameIds.length} frame{animation.frameIds.length === 1 ? '' : 's'} / {animation.fps} FPS
-              </span>
-              <span>
-                {animation.frameIds.filter((frameId) => selectedFrameIds.has(frameId)).length || 1} selected
-              </span>
-            </button>
-            <div className="atlas-frame-strip">
-              {animation.frameIds.map((frameId, index) => {
-                const selected = selectedFrameIds.has(frameId)
-                const active = selectedFrameId === frameId
-                const dragged = draggedFrameId === frameId
-                const className = [
-                  active ? 'active' : '',
-                  selected ? 'selected' : '',
-                  dragged ? 'dragging' : '',
-                ]
-                  .filter(Boolean)
-                  .join(' ')
-
-                return (
-                  <button
-                    key={frameId}
-                    type="button"
-                    className={className}
-                    draggable
-                    aria-pressed={selected}
-                    onClick={(event: MouseEvent<HTMLButtonElement>) => {
-                      onSelectFrame(animation.id, frameId, {
-                        range: event.shiftKey,
-                        toggle: event.ctrlKey || event.metaKey,
-                      })
-                    }}
-                    onDragStart={(event: DragEvent<HTMLButtonElement>) => {
-                      event.dataTransfer.effectAllowed = 'move'
-                      event.dataTransfer.setData('text/plain', frameId)
-                      onFrameDragStart(animation.id, frameId)
-                    }}
-                    onDragOver={(event: DragEvent<HTMLButtonElement>) => {
-                      event.preventDefault()
-                      event.dataTransfer.dropEffect = 'move'
-                    }}
-                    onDrop={(event: DragEvent<HTMLButtonElement>) => {
-                      event.preventDefault()
-                      onFrameDrop(animation.id, frameId)
-                    }}
-                    onDragEnd={onFrameDragEnd}
-                    title={`${animation.name} frame ${index + 1}. Drag to reorder.`}
-                  >
-                    <MiniSprite project={project} frameId={frameId} />
-                    <span>{index + 1}</span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-function FullSheetWorkspace({
-  project,
-  selectedAnimationId,
-  selectedFrameId,
-  selectedFrameIds,
-  onSelectFrame,
-}: {
-  project: SpriteProject
-  selectedAnimationId: AnimationId
-  selectedFrameId: FrameId
-  selectedFrameIds: Set<FrameId>
-  onSelectFrame: (animationId: AnimationId, frameId: FrameId) => void
-}) {
-  const columnCount = Math.max(...project.animations.map((animation) => animation.frameIds.length))
-
-  return (
-    <section className="sheet-workspace" aria-label="Full sprite sheet view">
-      <div className="stage-header">
-        <div>
-          <p className="eyebrow">Workspace</p>
-          <h2>Full Sprite Sheet View</h2>
-          <p>
-            {project.animations.length} row{project.animations.length === 1 ? '' : 's'} /{' '}
-            {project.canvas.width}x{project.canvas.height} cells per frame. Click any frame to edit it.
-          </p>
-        </div>
-      </div>
-
-      <div className="sheet-row-list">
-        {project.animations.map((animation) => (
-          <div
-            key={animation.id}
-            className={`sheet-row ${selectedAnimationId === animation.id ? 'active' : ''}`}
-          >
-            <div className="sheet-row-heading">
-              <strong>{animation.name}</strong>
-              <span>
-                {animation.frameIds.length} frame{animation.frameIds.length === 1 ? '' : 's'} / {animation.fps} FPS
-              </span>
-            </div>
-            <div className="sheet-row-strip">
-              {Array.from({ length: columnCount }).map((_, index) => {
-                const frameId = animation.frameIds[index]
-                if (!frameId) {
-                  return (
-                    <div
-                      key={`${animation.id}-empty-${index}`}
-                      className="sheet-frame-placeholder"
-                      aria-label={`${animation.name} empty sprite sheet cell ${index + 1}`}
-                    >
-                      <span>{index + 1}</span>
-                    </div>
-                  )
-                }
-
-                const active = selectedFrameId === frameId
-                const selected = selectedFrameIds.has(frameId)
-
-                return (
-                  <button
-                    key={frameId}
-                    type="button"
-                    className={`${active ? 'active' : ''} ${selected ? 'selected' : ''}`.trim()}
-                    onClick={() => onSelectFrame(animation.id, frameId)}
-                    title={`Edit ${animation.name} frame ${index + 1}`}
-                  >
-                    <MiniSprite project={project} frameId={frameId} />
-                    <span>{index + 1}</span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-function MiniSprite({
-  project,
-  frameId,
-  highlightedOperations = [],
-  className,
-}: {
-  project: SpriteProject
-  frameId: FrameId
-  highlightedOperations?: PixelPatchOperation[]
-  className?: string
-}) {
-  const pixels = composeFramePixels(project, frameId)
-  const highlightedCells = Array.from(
-    highlightedOperations
-      .reduce((cells, operation) => {
-        cells.set(cellKey(operation.x, operation.y), operation)
-        return cells
-      }, new Map<string, PixelPatchOperation>())
-      .values(),
-  )
-
-  return (
-    <div
-      className={className ? `mini-sprite ${className}` : 'mini-sprite'}
-      style={{
-        gridTemplateColumns: `repeat(${project.canvas.width}, 1fr)`,
-        gridTemplateRows: `repeat(${project.canvas.height}, 1fr)`,
-      }}
-    >
-      {pixels.map((pixel) => (
-        <span
-          key={`${pixel.x},${pixel.y},${pixel.colorId}`}
-          className="mini-pixel"
-          style={{
-            gridColumn: pixel.x + 1,
-            gridRow: pixel.y + 1,
-            background: pixel.hex,
-            opacity: pixel.opacity,
-            mixBlendMode: pixel.blendMode,
-          }}
-        />
-      ))}
-      {highlightedCells.map((operation) => (
-        <span
-          key={`highlight-${operation.x}-${operation.y}`}
-          className={`mini-highlight mini-highlight-${operation.op}`}
-          title={
-            operation.op === 'set'
-              ? `Proposed set ${operation.x},${operation.y} to ${operation.colorId}`
-              : `Proposed clear ${operation.x},${operation.y}`
-          }
-          style={{
-            gridColumn: operation.x + 1,
-            gridRow: operation.y + 1,
-          }}
-        />
-      ))}
-    </div>
-  )
-}
-
-function PatchAssistant({
-  project,
-  proposedPreviewProject,
-  frameId,
-  providerChoice,
-  setProviderChoice,
-  instruction,
-  setInstruction,
-  assetOutputContext,
-  setAssetOutputContext,
-  viewAngleContext,
-  setViewAngleContext,
-  proposedPatch,
-  activeProposedPatch,
-  disabledOperationIndexes,
-  patchErrors,
-  providerMessage,
-  providerDetails,
-  ollamaBaseUrl,
-  setOllamaBaseUrl,
-  ollamaModel,
-  setOllamaModel,
-  onGenerateMock,
-  onGenerateOllama,
-  onApply,
-  onReject,
-  onRemoveOperation,
-  onToggleOperation,
-  canApply,
-  onTestOllama,
-}: {
-  project: SpriteProject
-  proposedPreviewProject?: SpriteProject
-  frameId: FrameId
-  providerChoice: ProviderChoice
-  setProviderChoice: (provider: ProviderChoice) => void
-  instruction: string
-  setInstruction: (instruction: string) => void
-  assetOutputContext: SpriteWriteAssetOutputContext
-  setAssetOutputContext: (context: SpriteWriteAssetOutputContext) => void
-  viewAngleContext: SpriteWriteViewAngleContext
-  setViewAngleContext: (context: SpriteWriteViewAngleContext) => void
-  proposedPatch: PixelPatchOperation[]
-  activeProposedPatch: PixelPatchOperation[]
-  disabledOperationIndexes: Set<number>
-  patchErrors: string[]
-  providerMessage: string
-  providerDetails: string
-  ollamaBaseUrl: string
-  setOllamaBaseUrl: (value: string) => void
-  ollamaModel: string
-  setOllamaModel: (value: string) => void
-  onGenerateMock: () => void
-  onGenerateOllama: () => void
-  onApply: () => void
-  onReject: () => void
-  onRemoveOperation: (index: number) => void
-  onToggleOperation: (index: number) => void
-  canApply: boolean
-  onTestOllama: () => void
-}) {
-  const uniqueErrors = Array.from(new Set(patchErrors))
-  const disabledCount = disabledOperationIndexes.size
-
-  return (
-    <section className="patch-assistant">
-      <h2>AI Assistant</h2>
-      <label>
-        Provider
-        <select
-          value={providerChoice}
-          onChange={(event) => setProviderChoice(event.target.value as ProviderChoice)}
-        >
-          <option value="ollama">Ollama local</option>
-          <option value="mock">Mock local</option>
-        </select>
-      </label>
-      <label>
-        Instruction
-        <textarea value={instruction} onChange={(event) => setInstruction(event.target.value)} />
-      </label>
-      <div className="form-grid">
-        <label>
-          Output
-          <select
-            value={assetOutputContext}
-            onChange={(event) => setAssetOutputContext(event.target.value as SpriteWriteAssetOutputContext)}
-          >
-            <option value="auto">Auto</option>
-            <option value="static">Static frame / tile</option>
-            <option value="animated">Animated row</option>
-          </select>
-        </label>
-        <label>
-          View
-          <select
-            value={viewAngleContext}
-            onChange={(event) => setViewAngleContext(event.target.value as SpriteWriteViewAngleContext)}
-          >
-            <option value="auto">Auto</option>
-            <option value="side-scroller">Side-scroller</option>
-            <option value="top-down">Top-down</option>
-            <option value="three-quarter">2.5D / three-quarter</option>
-          </select>
-        </label>
-      </div>
-
-      {providerChoice === 'ollama' ? (
-        <div className="ollama-settings">
-          <label>
-            Base URL
-            <input value={ollamaBaseUrl} onChange={(event) => setOllamaBaseUrl(event.target.value)} />
-          </label>
-          <label>
-            Model
-            <input value={ollamaModel} onChange={(event) => setOllamaModel(event.target.value)} />
-          </label>
-          <button type="button" onClick={onTestOllama}>
-            Test Ollama
-          </button>
-        </div>
-      ) : null}
-
-      {providerChoice === 'ollama' ? (
-        <div className="button-stack">
-          <button type="button" onClick={onGenerateOllama}>
-            Generate With Ollama
-          </button>
-        </div>
-      ) : (
-        <div className="button-stack">
-          <button type="button" onClick={onGenerateMock}>
-            Generate Mock Edit
-          </button>
-        </div>
-      )}
-
-      <div className="patch-json-header">
-        <span>Active edit JSON</span>
-        {proposedPatch.length ? (
-          <span>
-            {activeProposedPatch.length}/{proposedPatch.length} enabled
-          </span>
-        ) : null}
-      </div>
-      <pre className="json-preview">
-        {activeProposedPatch.length ? JSON.stringify(activeProposedPatch, null, 2) : '[]'}
-      </pre>
-
-      <PatchPreviewComparison
-        project={project}
-        proposedPreviewProject={proposedPreviewProject}
-        frameId={frameId}
-        hasActivePatch={activeProposedPatch.length > 0}
-        highlightedOperations={activeProposedPatch}
-      />
-
-      <PatchDiff
-        patch={proposedPatch}
-        disabledOperationIndexes={disabledOperationIndexes}
-        onRemoveOperation={onRemoveOperation}
-        onToggleOperation={onToggleOperation}
-      />
-
-      {uniqueErrors.length ? (
-        <div className="validation-errors">
-          {uniqueErrors.map((error) => (
-            <p key={error}>{error}</p>
-          ))}
-        </div>
-      ) : null}
-
-      {providerMessage ? <p className="provider-message">{providerMessage}</p> : null}
-      <ProviderDetails details={providerDetails} />
-      {disabledCount ? <p className="status-line">{disabledCount} operation(s) excluded from apply.</p> : null}
-
-      <div className="frame-actions">
-        <button type="button" onClick={onApply} disabled={!canApply}>
-          Apply Edit
-        </button>
-        <button type="button" onClick={onReject} disabled={!proposedPatch.length}>
-          Reject Edit
-        </button>
-      </div>
-    </section>
-  )
-}
-
-function ProviderDetails({ details }: { details: string }) {
-  if (!details.trim()) {
-    return null
-  }
-
-  return (
-    <details className="provider-details">
-      <summary>Show provider details</summary>
-      <pre>{details}</pre>
-    </details>
-  )
-}
-
-function PatchPreviewComparison({
-  project,
-  proposedPreviewProject,
-  frameId,
-  hasActivePatch,
-  highlightedOperations,
-}: {
-  project: SpriteProject
-  proposedPreviewProject?: SpriteProject
-  frameId: FrameId
-  hasActivePatch: boolean
-  highlightedOperations: PixelPatchOperation[]
-}) {
-  return (
-    <div className="patch-preview-compare">
-      <div>
-        <span>Current frame</span>
-        <MiniSprite
-          project={project}
-          frameId={frameId}
-          highlightedOperations={highlightedOperations}
-        />
-      </div>
-      <div>
-        <span>Proposed edit</span>
-        {proposedPreviewProject ? (
-          <MiniSprite
-            project={proposedPreviewProject}
-            frameId={frameId}
-            highlightedOperations={highlightedOperations}
-          />
-        ) : (
-          <div className="mini-sprite empty-preview">
-            {hasActivePatch ? 'Invalid' : 'No edit'}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function PatchDiff({
-  patch,
-  disabledOperationIndexes,
-  onRemoveOperation,
-  onToggleOperation,
-}: {
-  patch: PixelPatchOperation[]
-  disabledOperationIndexes: Set<number>
-  onRemoveOperation: (index: number) => void
-  onToggleOperation: (index: number) => void
-}) {
-  const activePatch = patch.filter((_, index) => !disabledOperationIndexes.has(index))
-  const setCount = activePatch.filter((operation) => operation.op === 'set').length
-  const clearCount = activePatch.filter((operation) => operation.op === 'clear').length
-  const affectedCells = new Set(activePatch.map((operation) => `${operation.x},${operation.y}`))
-  const operationGroups = activePatch.reduce<Record<string, number>>((groups, operation) => {
-    const key = operation.op === 'set' ? operation.colorId : 'clear'
-    groups[key] = (groups[key] ?? 0) + 1
-    return groups
-  }, {})
-  const bounds = activePatch.length
-    ? activePatch.reduce(
-        (current, operation) => ({
-          minX: Math.min(current.minX, operation.x),
-          minY: Math.min(current.minY, operation.y),
-          maxX: Math.max(current.maxX, operation.x),
-          maxY: Math.max(current.maxY, operation.y),
-        }),
-        {
-          minX: activePatch[0].x,
-          minY: activePatch[0].y,
-          maxX: activePatch[0].x,
-          maxY: activePatch[0].y,
-        },
-      )
-    : undefined
-
-  return (
-    <div className="patch-diff">
-      <div className="patch-diff-summary">
-        <span>Set {setCount}</span>
-        <span>Clear {clearCount}</span>
-        <span>Ops {activePatch.length}</span>
-        <span>Cells {affectedCells.size}</span>
-        <span>
-          Bounds{' '}
-          {bounds
-            ? `${bounds.minX},${bounds.minY}-${bounds.maxX},${bounds.maxY}`
-            : 'none'}
-        </span>
-      </div>
-      {activePatch.length ? (
-        <div className="patch-group-list" aria-label="Active edit groups">
-          {Object.entries(operationGroups).map(([group, count]) => (
-            <span key={group}>
-              {group} {count}
-            </span>
-          ))}
-        </div>
-      ) : null}
-      {patch.length ? (
-        <ol>
-          {patch.slice(0, 12).map((operation, index) => {
-            const disabled = disabledOperationIndexes.has(index)
-            return (
-              <li
-                key={`${operation.op}-${operation.x}-${operation.y}-${index}`}
-                className={disabled ? 'disabled-operation' : ''}
-              >
-                <span>
-                  {operation.op === 'set'
-                    ? `set ${operation.x},${operation.y} -> ${operation.colorId}`
-                    : `clear ${operation.x},${operation.y}`}
-                </span>
-                <div className="patch-operation-actions">
-                  <button type="button" onClick={() => onToggleOperation(index)}>
-                    {disabled ? 'Include' : 'Exclude'}
-                  </button>
-                  <button type="button" onClick={() => onRemoveOperation(index)}>
-                    Remove
-                  </button>
-                </div>
-              </li>
-            )
-          })}
-        </ol>
-      ) : (
-        <p>No proposed edit.</p>
-      )}
-      {patch.length > 12 ? <p>{patch.length - 12} more operation(s).</p> : null}
-    </div>
   )
 }
 

@@ -84,7 +84,7 @@ AI assistance should be designed around focused operations:
 
 Prefer structured, reviewable results: editable pixel grids, palette changes, frame patches, duplicated-and-modified frames, or explicit layer operations. If an asset needs colors outside the current palette, the provider should propose explicit palette additions rather than SpriteWrite hard-coding finished art for that asset type.
 
-AI output must never become an irreversible replacement. The user must be able to preview, accept, reject, undo, and manually edit every result.
+AI output must never become an irreversible replacement. The user must be able to preview, accept, reject, undo, and manually edit every result. SpriteWrite should also critique provider drafts against explicit product intent, such as frame count, readable cell coverage, material/color fit, motion continuity, and tile anchoring, and use that critique to request a repaired draft before giving up.
 
 AI prompting should carry explicit asset context so the user does not have to stuff every constraint into prose. SpriteWrite should help frame requests as static assets, animated rows, tileable terrain/walls/floors, props, icons, effects, or backgrounds. It should also expose view context when relevant, such as side-scroller side view, top-down view, or 2.5D/three-quarter view, because those constraints change silhouettes, tile edges, lighting, anchors, and readability.
 

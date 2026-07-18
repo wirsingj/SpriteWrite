@@ -26,18 +26,17 @@ No feature should bypass the `SpriteProject` model. No feature should make the c
 12. Edit selected-frame name, duration, notes, tags, anchor, and hitbox metadata when needed.
 13. Use onion skin for animation continuity.
 14. Preview the current frame or animation.
-15. Use the default Ollama local provider, optionally refresh/download a local model, or switch to Mock local.
+15. Use local Ollama, optionally refresh/download a local model, and ask SpriteWrite for an editable frame edit, frame draft, animation row, or animation set.
 16. Set output/view context when useful: static frame or tile, animated row, side-scroller, top-down, or 2.5D/three-quarter.
 17. For static prompts such as "ground tileable set" or "stone wall piece," expect a complete editable frame.
 18. For broad animation prompts such as "hero wearing a cape, standing animation," expect 3-6 editable frame drafts in the selected animation row.
 19. Validate edit or draft output.
 20. Preview proposed selected-frame edits before applying them.
-21. Exclude, include, or remove unwanted selected-frame edit operations if needed.
-22. Apply or reject edit/draft output.
-23. Undo or redo as needed.
-24. Add, select, reorder, hide, apply layer presets, change blend mode, exclude from export, or delete layers as needed.
-25. Export project JSON.
-26. Export current frame PNG, current animation strip PNG, full sprite sheet PNG, or full sprite sheet PNG plus metadata JSON.
+21. Apply or reject edit/draft output.
+22. Undo or redo as needed.
+23. Add, select, reorder, hide, apply layer presets, change blend mode, exclude from export, or delete layers as needed.
+24. Export project JSON.
+25. Export current frame PNG, current animation strip PNG, full sprite sheet PNG, or full sprite sheet PNG plus metadata JSON.
 
 ## Current MVP Flow
 
@@ -63,8 +62,8 @@ Future AI operations should stay focused and reviewable: draft a first frame, de
 - Onion skin renders previous-frame pixels faintly behind empty current-frame cells.
 - Valid proposed selected-frame edit operations render as an overlay until accepted or rejected.
 - Invalid selected-frame edit operations show errors and do not render overlays on the canvas.
-- Proposed edit operations are also summarized as set/clear counts and an operation list.
-- Individual proposed edit operations can be excluded, re-included, or removed before applying the active edit.
+- Valid selected-frame edit proposals show highlighted cells plus an apply/reject bar in the canvas workspace.
+- Provider details expose returned JSON and validation details when a proposal needs debugging.
 - The atlas overview renders each animation as a bottom filmstrip row attached to the canvas. Frames can be clicked, shift-selected, ctrl/cmd-toggled, duplicated, deleted, batch-timed, batch-tagged, batch-noted, and drag-reordered within their row.
 - The full sprite sheet view renders every animation row in the center workspace using the same row/column order as full sprite sheet PNG export; clicking a real frame returns to detailed frame editing, and shorter rows show transparent trailing cells.
 - The bottom atlas panel height and right preview/inspector panel width can be resized on desktop.
@@ -91,7 +90,7 @@ Future AI operations should stay focused and reviewable: draft a first frame, de
 - Undo and redo store project snapshots.
 - Layer changes use cloned project updates. Add/delete/reorder/visibility/export-inclusion/blend-mode operations apply consistently across frames by layer ID.
 - Keyboard shortcuts can switch paint/erase, move between frames, undo/redo, and toggle preview playback when focus is not inside a form control. Shortcut customization is not currently exposed in the editor.
-- The command palette opens from the editor header or `Ctrl+K`, filters available commands, and can run common editor/export/patch actions.
+- The command palette opens with `Ctrl+K`, filters available commands, and can run common editor/export/patch actions.
 - Import parses JSON, validates it through `validateProject()`, and replaces the in-memory project only when valid.
 - Successful import resets undo/redo history because it is treated as opening a different project.
 - Invalid import leaves the current project untouched and displays validation errors.

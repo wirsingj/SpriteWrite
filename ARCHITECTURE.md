@@ -16,7 +16,7 @@ agent-guidance: Prefer existing patterns. Keep project data canonical. Do not in
 ## Stack
 
 - Vite application.
-- React UI in `src/App.tsx`.
+- React UI coordinated by `src/App.tsx` with stable editor/start-screen surfaces extracted into `src/components/`.
 - TypeScript domain and provider code.
 - Plain CSS in `src/App.css` and `src/index.css`.
 - Vitest tests colocated near source files.
@@ -45,6 +45,7 @@ The model is engine-neutral. OozeTactics and Godot can consume exported artifact
 ## Module Boundaries
 
 - `src/domain/spriteTypes.ts`: core TypeScript types.
+- `src/domain/assetTypes.ts`: shared asset-type labels and options for app/template UI.
 - `src/domain/spriteData.ts`: project creation, validation, patch validation/apply, and pure project transformations.
 - `src/domain/projectTemplates.ts`: template definitions for new projects.
 - `src/domain/rendering.ts`: preview composition from project data.
@@ -53,7 +54,8 @@ The model is engine-neutral. OozeTactics and Godot can consume exported artifact
 - `src/providers/*`: AI patch provider contracts and implementations.
 - `src/utils/canvasExport.ts`: browser canvas/blob wrappers around the tested RGBA export buffer.
 - `src/utils/download.ts`: browser download helpers.
-- `src/App.tsx`: app shell, editor UI, user interactions, local browser draft state, and command palette.
+- `src/components/*`: extracted React UI surfaces such as the start screen, command palette, color picker, atlas timeline, full-sheet workspace, mini sprite thumbnail, and provider-details disclosure.
+- `src/App.tsx`: app orchestration, editor state, project mutations, provider workflow, export actions, browser draft state, and composition of extracted UI components.
 
 ## Data Flow
 
@@ -66,7 +68,7 @@ UI action -> PixelPatchOperation[] -> validatePatch() -> applyPatch() -> SpriteP
 AI Assist selected-frame edit:
 
 ```text
-instruction + project context -> provider -> PixelPatchOperation[] -> validate -> preview -> include/exclude/remove -> apply or reject
+instruction + project context -> provider -> PixelPatchOperation[] -> validate -> canvas preview -> apply or reject
 ```
 
 The UI should present this flow as AI Assist, edits, and drafts. "Patch" remains an internal JSON operation and validation term, not the primary product language.
@@ -125,11 +127,11 @@ SpriteProject -> Project JSON export
 
 ## Provider Architecture
 
-`AiPatchProvider` is the seam for selected-frame patch proposal providers. The Mock provider is deterministic and local. The Ollama provider is experimental and may also expose structured animation-draft and animation-set methods. Provider rails return JSON cell operations or compact recipe JSON that SpriteWrite expands into JSON cell operations.
+`AiPatchProvider` is the seam for selected-frame patch proposal providers. The Mock provider is deterministic and local, but currently retained as an internal/test fixture rather than a visible creative provider. The Ollama provider is experimental and may also expose structured animation-draft and animation-set methods. Provider rails return JSON cell operations or compact recipe JSON that SpriteWrite expands into JSON cell operations.
 
 `src/providers/spriteWritePromptIntent.ts` is the small interpretation layer between plain user prompts and provider calls. It currently classifies prompts as selected-frame edits, single-frame drafts, 3-6 frame animation drafts, or multi-variation animation sets, then pads the instruction with SpriteWrite constraints before Ollama sees it. Users should not need to manually write provider-contract prompts.
 
-Current recipe-shaped Ollama rails cover a few observed qwen-stable structural families: grass wave/tile variation sets, character/hero idle, and tentacle creature variation sets. Asset-specific requests such as rotating gold coins should generally use direct animation draft JSON with optional palette additions rather than SpriteWrite-owned art generators.
+Current recipe-shaped Ollama rails cover a few observed qwen-stable structural families: grass wave/tile variation sets, character/hero idle, tentacle creature variation sets, and a generic spinning-object fallback for compact rotating icon/object drafts when direct draft attempts fail. Asset-specific requests such as rotating gold coins should use direct animation draft JSON with optional palette additions first rather than starting from SpriteWrite-owned art generators.
 
 Future rails may add structured palette or layer operations, but must remain reviewable, reversible, and derived into `SpriteProject` data before export.
 

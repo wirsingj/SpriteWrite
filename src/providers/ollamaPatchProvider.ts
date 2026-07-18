@@ -270,6 +270,9 @@ function shouldUseRecipeDraft(instruction: string): boolean {
     normalized.includes('hero') ||
     normalized.includes('character') ||
     normalized.includes('cape') ||
+    normalized.includes('coin') ||
+    normalized.includes('spinning') ||
+    normalized.includes('rotating') ||
     normalized.includes('tentacle') ||
     normalized.includes('monster')
   )
@@ -313,6 +316,12 @@ function expandOllamaRecipeDraft(
     return expandTentacleCreatureRecipe(candidate, project, options)
   }
 
+  if (candidate.recipe === 'spinning_object') {
+    return {
+      animations: [expandSpinningObjectRecipe(candidate, project, options.frameCount)],
+    }
+  }
+
   if ('frames' in candidate && Array.isArray(candidate.frames)) {
     return {
       animations: [parseOllamaAnimationDraftObject(candidate)],
@@ -320,6 +329,92 @@ function expandOllamaRecipeDraft(
   }
 
   throw new Error(`Unsupported SpriteWrite recipe "${String(candidate.recipe)}".`)
+}
+
+
+function expandSpinningObjectRecipe(recipe: Record<string, unknown>, project: SpriteProject, frameCount: number): OllamaAnimationDraft {
+  const requestedFrameCount = Math.max(3, Math.min(6, frameCount))
+  const frames = Array.isArray(recipe.frames) ? recipe.frames : []
+  const material = typeof recipe.material === 'string' ? recipe.material.toLowerCase() : ''
+  const paletteAdditions = createSpinningObjectPaletteAdditions(material, recipe)
+  const colorIds = getSpinningObjectColorIds(project, paletteAdditions, material)
+  const fallbackWidths = [10, 5, 3, 5, 10, 5]
+
+  return {
+    animationName: typeof recipe.animationName === 'string' && recipe.animationName.trim() ? recipe.animationName.trim() : material.includes('gold') ? 'Gold Spin' : 'Object Spin',
+    fps: typeof recipe.fps === 'number' && Number.isFinite(recipe.fps) ? Math.max(1, Math.round(recipe.fps)) : 8,
+    paletteAdditions,
+    frames: Array.from({ length: requestedFrameCount }, (_, index) => {
+      const sourceFrame = frames[index] && typeof frames[index] === 'object' ? (frames[index] as Record<string, unknown>) : {}
+      const width = clampInteger(sourceFrame.width, 2, Math.min(14, project.canvas.width), fallbackWidths[index % fallbackWidths.length])
+      const height = clampInteger(sourceFrame.height, 6, Math.min(16, project.canvas.height), 12)
+      const highlightX = clampInteger(sourceFrame.highlightX, -6, 6, index % 2 === 0 ? -3 : 1)
+      const shadowX = clampInteger(sourceFrame.shadowX, -6, 6, index % 2 === 0 ? 3 : -1)
+      const frameName = typeof sourceFrame.name === 'string' ? sourceFrame.name : ''
+      const animationName = typeof recipe.animationName === 'string' ? recipe.animationName : 'Spin'
+      return {
+        name: frameName || animationName + ' ' + String(index + 1).padStart(3, '0'),
+        durationMs: 125,
+        patch: createSpinningObjectPatch(project, { width, height, highlightX, shadowX, colors: colorIds }),
+      }
+    }),
+  }
+}
+
+function createSpinningObjectPaletteAdditions(material: string, recipe: Record<string, unknown>): PaletteColor[] {
+  const explicit = parsePaletteAdditions(recipe.paletteAdditions)
+  if (explicit?.length) {
+    return explicit
+  }
+  if (material.includes('gold') || material.includes('coin')) {
+    return [
+      { id: 'asset_gold_shadow', name: 'Asset Gold Shadow', hex: '#7a4d10' },
+      { id: 'asset_gold', name: 'Asset Gold', hex: '#d99a1e' },
+      { id: 'asset_gold_light', name: 'Asset Gold Light', hex: '#f6c945' },
+      { id: 'asset_gold_highlight', name: 'Asset Gold Highlight', hex: '#fff0a8' },
+    ]
+  }
+  return []
+}
+
+function getSpinningObjectColorIds(project: SpriteProject, additions: PaletteColor[], material: string) {
+  const ids = new Set([...project.palette.map((color) => color.id), ...additions.map((color) => color.id)])
+  const first = project.palette.find((color) => !color.isTransparent)?.id ?? 'accent'
+  const pick = (...candidates: string[]) => candidates.find((candidate) => ids.has(candidate)) ?? first
+  const isGold = material.includes('gold') || material.includes('coin') || additions.some((color) => color.id.includes('gold'))
+  return {
+    outline: pick('ink', 'outline', 'charcoal', 'shadow'),
+    shadow: isGold ? pick('asset_gold_shadow', 'coin_shadow', 'shadow', 'charcoal') : pick('shadow', 'charcoal', 'mid_gray'),
+    mid: isGold ? pick('asset_gold', 'coin_gold', 'accent') : pick('accent', 'mid_gray', first),
+    light: isGold ? pick('asset_gold_light', 'coin_light', 'light_gray') : pick('light_gray', 'white', 'accent'),
+    highlight: isGold ? pick('asset_gold_highlight', 'coin_highlight', 'white') : pick('white', 'light_gray', 'accent'),
+  }
+}
+
+function createSpinningObjectPatch(
+  project: SpriteProject,
+  options: { width: number; height: number; highlightX: number; shadowX: number; colors: { outline: string; shadow: string; mid: string; light: string; highlight: string } },
+): PixelPatchOperation[] {
+  const cx = Math.floor(project.canvas.width / 2)
+  const cy = Math.floor(project.canvas.height / 2)
+  const rx = Math.max(1, options.width / 2)
+  const ry = Math.max(3, options.height / 2)
+  const cells = new Map<string, string>()
+  for (let y = Math.max(0, Math.floor(cy - ry - 1)); y <= Math.min(project.canvas.height - 1, Math.ceil(cy + ry + 1)); y += 1) {
+    for (let x = Math.max(0, Math.floor(cx - rx - 1)); x <= Math.min(project.canvas.width - 1, Math.ceil(cx + rx + 1)); x += 1) {
+      const nx = (x - cx) / rx
+      const ny = (y - cy) / ry
+      const distance = nx * nx + ny * ny
+      if (distance <= 1.08) {
+        const edge = distance > 0.76
+        const highlight = Math.abs(x - (cx + options.highlightX)) <= 1 && y <= cy + 1 && y >= cy - Math.floor(ry)
+        const shadow = Math.abs(x - (cx + options.shadowX)) <= 1 && y >= cy
+        const colorId = edge ? options.colors.outline : highlight ? options.colors.highlight : shadow ? options.colors.shadow : y < cy ? options.colors.light : options.colors.mid
+        setRecipeCell(cells, x, y, colorId, project)
+      }
+    }
+  }
+  return mapCellsToPatch(cells)
 }
 
 function expandGrassWaveRecipe(
@@ -1018,6 +1113,24 @@ Rules:
 - capeLean, headTilt, and armPose are integers from -2 to 2.
 - Keep the same character identity across frames.
 - No patch arrays, no width/height, no prose.`
+  }
+
+
+  if (normalized.includes('coin') || normalized.includes('spinning') || normalized.includes('rotating')) {
+    return `Return JSON only. No markdown. No cells.
+SpriteWrite padded request:
+${request.instruction}
+Return exactly this shape:
+{"recipe":"spinning_object","animationName":"Gold Coin","fps":8,"material":"gold","frames":[{"name":"Spin 001","width":10,"height":12,"highlightX":-3,"shadowX":3},{"name":"Spin 002","width":5,"height":12,"highlightX":0,"shadowX":2}]}
+
+Rules:
+- Return exactly ${frameCount} frames.
+- This is a compact recipe, not patch operations.
+- width is 2-14. Use wide/narrow/wide/narrow rhythm for rotation.
+- height is 6-16 and should stay mostly stable.
+- highlightX and shadowX are offsets from the centered object, -6 to 6.
+- material should match the user request when obvious, such as gold, silver, copper, gem, crystal, fire, ice, leaf, or generic.
+- No patch arrays, no colorId fields, no transparent operations, no prose.`
   }
 
   return `Return JSON only. No markdown. No prose.

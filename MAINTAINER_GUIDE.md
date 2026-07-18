@@ -60,7 +60,7 @@ The package scripts are:
 - Domain data/model changes: run relevant tests in `src/domain/*.test.ts` plus `npm run typecheck`.
 - Export changes: run `src/domain/exportPlanning.test.ts`, `src/domain/exportRaster.test.ts`, `src/utils/canvasExport.test.ts`, plus build/typecheck.
 - Provider parsing changes: run `src/providers/ollamaPatchProvider.test.ts`.
-- Ollama provider changes: `src/providers/ollamaPatchProvider.test.ts` includes live local `qwen3:14b` integration checks when Ollama is running and that model is installed. Current live checks cover recipe/draft paths for coin, grass variation sets, hero idle/cape, and tentacle creature variations, so the focused provider suite can take longer than ordinary unit tests. If aborted Ollama requests leave qwen busy, unload it with a local `/api/generate` call using `{"model":"qwen3:14b","keep_alive":0}` before rerunning.
+- Ollama provider changes: run `src/providers/ollamaPatchProvider.test.ts` and `src/providers/ollamaDraftQuality.test.ts`. Live local `qwen3:14b` quality probes are registered separately under `npm run test:ollama`; they cover direct coin drafts, grass variation sets, hero idle/cape, and tentacle creature variations when Ollama and the model are available. If aborted Ollama requests leave qwen busy, unload it with a local `/api/generate` call using `{"model":"qwen3:14b","keep_alive":0}` before rerunning.
 - App-shell/UI behavior changes: run `src/App.test.tsx` plus lint/typecheck.
 - Documentation-only YAIML changes do not require app checks, but still inspect `git status --short`.
 
@@ -78,7 +78,9 @@ The package scripts are:
 - `src/domain/spriteData.ts`: validation and pure project operations.
 - `src/domain/exportPlanning.ts`: layout and metadata.
 - `src/domain/exportRaster.ts`: pure pixel export renderer.
-- `src/App.tsx`: main app UI and interaction state.
+- `src/App.tsx`: app orchestration, state, provider workflow, and project mutations.
+- `src/components/`: extracted UI surfaces for start screen, command palette, color picker, atlas timeline, full-sheet workspace, mini sprite thumbnail, and provider details.
+- `src/domain/assetTypes.ts`: shared asset-type labels/options used by project/start UI.
 
 ## Current Worktree Caution
 

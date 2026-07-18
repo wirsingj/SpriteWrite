@@ -1,13 +1,19 @@
 :root {
-  --page-bg: #0f1415;
-  --panel: #151c1e;
-  --control: #1d272a;
-  --control-active: #243632;
-  --line: #2b3839;
-  --text: #d8e1dc;
-  --heading: #f5fff8;
-  --muted: #93a19b;
-  --accent: #8de06f;
+  --page-bg: #0b0c10;
+  --panel: #17181f;
+  --panel-elevated: #1d1f28;
+  --control: #242733;
+  --control-active: #283750;
+  --line: #30333f;
+  --line-soft: rgba(255, 255, 255, 0.075);
+  --text: #d8dce7;
+  --heading: #f6f7fb;
+  --muted: #9298a8;
+  --accent: #0a84ff;
+  --accent-soft: rgba(10, 132, 255, 0.14);
+  --accent-ring: rgba(10, 132, 255, 0.55);
+  --accent-text: #8dccff;
+  --danger: #ff6961;
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 14px;
@@ -23,6 +29,27 @@
 
 * {
   box-sizing: border-box;
+  scrollbar-color: #4b5263 #151720;
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: #151720;
+}
+
+*::-webkit-scrollbar-thumb {
+  border: 2px solid #151720;
+  border-radius: 999px;
+  background: #4b5263;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #626a7c;
 }
 
 body {
@@ -34,5 +61,5 @@ button,
 input,
 select,
 textarea {
-  border-radius: 6px;
+  border-radius: 8px;
 }
