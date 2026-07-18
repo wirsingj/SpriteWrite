@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useEffect,
   useMemo,
   useRef,
@@ -6,6 +7,7 @@ import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
+import { flushSync } from 'react-dom'
 import './App.css'
 import { AtlasOverview } from './components/AtlasOverview'
 import { ColorPickerField } from './components/ColorPickerField'
@@ -93,20 +95,23 @@ type AppMode = 'start' | 'editor'
 type WorkspaceMode = 'frame' | 'sheet'
 type DockTab = 'palette' | 'layers'
 type InspectorTab = 'frame' | 'animation'
-type ShortcutAction = 'paint' | 'erase'
 type LayerPresetId = 'art' | 'guide' | 'shadow' | 'highlight'
 type ProviderAttemptContext = {
   attempt: number
   startedAt: number
 }
+type ProviderReview = {
+  title: string
+  metrics: Array<{ label: string; value: string }>
+  rows: string[]
+}
 
 const TRANSPARENT_LABEL = 'transparent'
 const BROWSER_DRAFT_STORAGE_KEY = 'spritewrite.browserDraft.v1'
-const SHORTCUTS_STORAGE_KEY = 'spritewrite.shortcuts.v1'
-const DEFAULT_SHORTCUTS: Record<ShortcutAction, string> = {
+const DEFAULT_SHORTCUTS = {
   paint: 'p',
   erase: 'e',
-}
+} as const
 const LAYER_PRESETS: Array<{
   id: LayerPresetId
   label: string
@@ -229,6 +234,10 @@ function formatProviderDetails(title: string, details: Record<string, unknown>):
   return `${title}\n\n${safeStringify(details)}`
 }
 
+function formatUnknownError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
 function formatErrorForDetails(error: unknown): Record<string, unknown> {
   if (error instanceof OllamaDraftQualityError) {
     return {
@@ -247,6 +256,70 @@ function formatErrorForDetails(error: unknown): Record<string, unknown> {
   }
 
   return { message: String(error) }
+}
+
+function countDraftOperations(draft: OllamaAnimationDraft): number {
+  return draft.frames.reduce((total, frame) => total + frame.patch.length, 0)
+}
+
+function createAnimationDraftReview(
+  draft: OllamaAnimationDraft,
+  createdFrameIds: FrameId[],
+  qualityAttempts: Array<OllamaDraftQualityAttempt<OllamaAnimationDraft>>,
+): ProviderReview {
+  return {
+    title: `Draft review: ${draft.animationName?.trim() || 'Animation row'}`,
+    metrics: [
+      { label: 'Frames', value: String(draft.frames.length) },
+      { label: 'Patch ops', value: String(countDraftOperations(draft)) },
+      { label: 'Palette additions', value: String(draft.paletteAdditions?.length ?? 0) },
+      { label: 'Quality attempts', value: String(qualityAttempts.length) },
+      { label: 'FPS', value: String(draft.fps ?? 'unchanged') },
+    ],
+    rows: draft.frames.map((frame, index) => {
+      const name = frame.name?.trim() || createdFrameIds[index] || `Frame ${index + 1}`
+      return `${name} - ${frame.patch.length} operation${frame.patch.length === 1 ? '' : 's'}`
+    }),
+  }
+}
+
+function createAnimationSetDraftReview(
+  draft: OllamaAnimationSetDraft,
+  qualityAttempts: Array<OllamaDraftQualityAttempt<OllamaAnimationSetDraft>>,
+): ProviderReview {
+  const frameCount = draft.animations.reduce((total, animation) => total + animation.frames.length, 0)
+  const patchOperationCount = draft.animations.reduce(
+    (total, animation) => total + animation.frames.reduce((frameTotal, frame) => frameTotal + frame.patch.length, 0),
+    0,
+  )
+  const paletteAdditionCount = draft.animations.reduce(
+    (total, animation) => total + (animation.paletteAdditions?.length ?? 0),
+    0,
+  )
+
+  return {
+    title: 'Draft review: animation set',
+    metrics: [
+      { label: 'Rows', value: String(draft.animations.length) },
+      { label: 'Frames', value: String(frameCount) },
+      { label: 'Patch ops', value: String(patchOperationCount) },
+      { label: 'Palette additions', value: String(paletteAdditionCount) },
+      { label: 'Quality attempts', value: String(qualityAttempts.length) },
+    ],
+    rows: draft.animations.map((animation, index) => {
+      const name = animation.animationName?.trim() || `Animation ${index + 1}`
+      const operations = animation.frames.reduce((total, frame) => total + frame.patch.length, 0)
+      return `${name} - ${animation.frames.length} frame${
+        animation.frames.length === 1 ? '' : 's'
+      }, ${operations} operation${operations === 1 ? '' : 's'}`
+    }),
+  }
+}
+
+function flushProviderMessage(setProviderMessage: (message: string) => void, message: string) {
+  flushSync(() => {
+    setProviderMessage(message)
+  })
 }
 
 function safeStringify(value: unknown): string {
@@ -355,37 +428,6 @@ function getGeneratedPatchCoherenceErrors(
   return []
 }
 
-function loadShortcutSettings(): Record<ShortcutAction, string> {
-  if (typeof window === 'undefined') {
-    return DEFAULT_SHORTCUTS
-  }
-
-  try {
-    const stored = window.localStorage.getItem(SHORTCUTS_STORAGE_KEY)
-    if (!stored) {
-      return DEFAULT_SHORTCUTS
-    }
-    const parsed = JSON.parse(stored) as Partial<Record<ShortcutAction, unknown>>
-    const shortcuts = {
-      paint: normalizeShortcutValue(parsed.paint, DEFAULT_SHORTCUTS.paint),
-      erase: normalizeShortcutValue(parsed.erase, DEFAULT_SHORTCUTS.erase),
-    }
-    return shortcuts.paint === shortcuts.erase ? DEFAULT_SHORTCUTS : shortcuts
-  } catch {
-    window.localStorage.removeItem(SHORTCUTS_STORAGE_KEY)
-    return DEFAULT_SHORTCUTS
-  }
-}
-
-function normalizeShortcutValue(value: unknown, fallback: string): string {
-  if (typeof value !== 'string') {
-    return fallback
-  }
-
-  const normalized = value.trim().slice(0, 1).toLowerCase()
-  return normalized || fallback
-}
-
 function clampNumber(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
 }
@@ -393,6 +435,10 @@ function clampNumber(value: number, min: number, max: number): number {
 function filenameSlug(value: string): string {
   const slug = value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
   return slug || 'spritewrite'
+}
+
+function getLayerGroupLabel(group: string | undefined): string {
+  return group?.trim() || 'Ungrouped'
 }
 
 function loadInitialProject(): SpriteProject {
@@ -459,6 +505,7 @@ function App() {
   const [importErrors, setImportErrors] = useState<string[]>([])
   const [providerMessage, setProviderMessage] = useState('')
   const [providerDetails, setProviderDetails] = useState('')
+  const [providerReview, setProviderReview] = useState<ProviderReview | null>(null)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [ollamaBaseUrl, setOllamaBaseUrl] = useState('http://localhost:11434')
   const [ollamaModel, setOllamaModel] = useState('llama3.2')
@@ -470,7 +517,7 @@ function App() {
   const [exportSpacing, setExportSpacing] = useState(0)
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
   const [commandQuery, setCommandQuery] = useState('')
-  const [shortcuts] = useState(loadShortcutSettings)
+  const shortcuts = DEFAULT_SHORTCUTS
   const [newProjectName, setNewProjectName] = useState('Untitled Sprite')
   const [newProjectTemplateId, setNewProjectTemplateId] = useState('blank-32')
   const [newProjectWidth, setNewProjectWidth] = useState(32)
@@ -494,6 +541,7 @@ function App() {
     : ''
   const importInputRef = useRef<HTMLInputElement | null>(null)
   const layerNameInputRef = useRef<HTMLInputElement | null>(null)
+  const layerGroupInputRef = useRef<HTMLInputElement | null>(null)
   const colorNameInputRef = useRef<HTMLInputElement | null>(null)
   const colorHexInputRef = useRef<HTMLInputElement | null>(null)
   const ollamaAttemptRef = useRef(0)
@@ -555,6 +603,11 @@ function App() {
       }),
     [exportMargin, exportScale, exportSpacing, fullSpriteSheetImageFilename, project],
   )
+
+  function clearProviderDiagnostics() {
+    setProviderDetails('')
+    setProviderReview(null)
+  }
 
   useEffect(() => {
     if (!isPlaying || frameIds.length < 2) {
@@ -683,7 +736,7 @@ function App() {
 
     didAutoRefreshOllamaRef.current = true
     setProviderMessage(`Checking local Ollama at ${ollamaBaseUrl}...`)
-    setProviderDetails('')
+    clearProviderDiagnostics()
     setIsOllamaBusy(true)
 
     listOllamaModels(ollamaBaseUrl)
@@ -724,14 +777,6 @@ function App() {
       })
       .finally(() => setIsOllamaBusy(false))
   }, [ollamaBaseUrl, activeOllamaModel])
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(SHORTCUTS_STORAGE_KEY, JSON.stringify(shortcuts))
-    } catch {
-      // Shortcut settings are a convenience preference and can be safely ignored if storage fails.
-    }
-  }, [shortcuts])
 
   function commitProject(nextProject: SpriteProject) {
     setUndoStack((stack) => [...stack.slice(-49), cloneProject(project)])
@@ -1168,7 +1213,7 @@ function App() {
         ollamaModelSuitabilityNote ? ` ${ollamaModelSuitabilityNote}` : ''
       }`,
     )
-    setProviderDetails('')
+    clearProviderDiagnostics()
     setIsOllamaBusy(true)
     try {
       const provider = new OllamaPatchProvider({ baseUrl: ollamaBaseUrl, model: activeOllamaModel })
@@ -1243,7 +1288,7 @@ function App() {
       }`,
     )
     setProposedPatch([])
-    setProviderDetails('')
+    clearProviderDiagnostics()
     setIsOllamaBusy(true)
 
     try {
@@ -1530,6 +1575,7 @@ function App() {
         createdFrameIds.length === 1 ? '' : 's'
       } for "${animation.name}".`,
     )
+    setProviderReview(createAnimationDraftReview(draft, createdFrameIds, qualityAttempts))
     setProviderDetails(
       formatProviderDetails('Ollama animation draft accepted', {
         attempt: attemptContext.attempt,
@@ -1752,6 +1798,7 @@ function App() {
         setDraft.animations.length === 1 ? '' : 's'
       } with ${createdFrameIds.length} editable frame${createdFrameIds.length === 1 ? '' : 's'}.`,
     )
+    setProviderReview(createAnimationSetDraftReview(setDraft, qualityAttempts))
     setProviderDetails(
       formatProviderDetails('Ollama animation set accepted', {
         attempt: attemptContext.attempt,
@@ -1771,7 +1818,7 @@ function App() {
 
   async function refreshOllamaModels() {
     setProviderMessage(`Checking Ollama at ${ollamaBaseUrl}...`)
-    setProviderDetails('')
+    clearProviderDiagnostics()
     setIsOllamaBusy(true)
     try {
       const models = await listOllamaModels(ollamaBaseUrl)
@@ -1812,7 +1859,7 @@ function App() {
 
   async function downloadOllamaModel() {
     setProviderMessage(`Downloading Ollama model "${activeOllamaModel}"...`)
-    setProviderDetails('')
+    clearProviderDiagnostics()
     setIsOllamaBusy(true)
     try {
       const message = await pullOllamaModel(ollamaBaseUrl, activeOllamaModel)
@@ -1861,13 +1908,13 @@ function App() {
     commitProject(applyPatch(project, selectedAnimation.id, selectedFrameId, selectedLayerId, activeProposedPatch))
     setProposedPatch([])
     setProviderMessage('Edit applied.')
-    setProviderDetails('')
+    clearProviderDiagnostics()
   }
 
   function rejectPatch() {
     setProposedPatch([])
     setProviderMessage('Edit rejected.')
-    setProviderDetails('')
+    clearProviderDiagnostics()
   }
 
   function runCommand(command: CommandItem) {
@@ -1916,31 +1963,50 @@ function App() {
   }
 
   async function exportCurrentFramePng() {
-    const blob = await exportFramePng(project, selectedFrameId, exportScale)
-    downloadBlob(`${selectedFrameId}@${exportScale}x.png`, blob)
+    try {
+      flushProviderMessage(setProviderMessage, 'Preparing current frame PNG...')
+      const blob = await exportFramePng(project, selectedFrameId, exportScale)
+      flushProviderMessage(setProviderMessage, 'Current frame PNG ready for download.')
+      downloadBlob(`${selectedFrameId}@${exportScale}x.png`, blob)
+    } catch (error) {
+      setProviderMessage(`Current frame PNG export failed: ${formatUnknownError(error)}`)
+    }
   }
 
   async function exportAnimationStripPng() {
-    const blob = await exportSpritesheetPng(project, selectedAnimation.id, {
-      scale: exportScale,
-      margin: exportMargin,
-      spacing: exportSpacing,
-    })
-    downloadBlob(`${selectedAnimation.id}-animation-strip@${exportScale}x.png`, blob)
+    try {
+      flushProviderMessage(setProviderMessage, 'Preparing current animation strip PNG...')
+      const blob = await exportSpritesheetPng(project, selectedAnimation.id, {
+        scale: exportScale,
+        margin: exportMargin,
+        spacing: exportSpacing,
+      })
+      flushProviderMessage(setProviderMessage, 'Current animation strip PNG ready for download.')
+      downloadBlob(`${selectedAnimation.id}-animation-strip@${exportScale}x.png`, blob)
+    } catch (error) {
+      setProviderMessage(`Current animation strip PNG export failed: ${formatUnknownError(error)}`)
+    }
   }
 
   async function exportFullSpriteSheetPngOnly() {
-    const blob = await exportFullSpriteSheetPng(project, {
-      scale: exportScale,
-      margin: exportMargin,
-      spacing: exportSpacing,
-      imageFilename: fullSpriteSheetImageFilename,
-    })
-    downloadBlob(fullSpriteSheetImageFilename, blob)
+    try {
+      flushProviderMessage(setProviderMessage, 'Preparing full sprite sheet PNG...')
+      const blob = await exportFullSpriteSheetPng(project, {
+        scale: exportScale,
+        margin: exportMargin,
+        spacing: exportSpacing,
+        imageFilename: fullSpriteSheetImageFilename,
+      })
+      flushProviderMessage(setProviderMessage, 'Full sprite sheet PNG ready for download.')
+      downloadBlob(fullSpriteSheetImageFilename, blob)
+    } catch (error) {
+      setProviderMessage(`Full sprite sheet PNG export failed: ${formatUnknownError(error)}`)
+    }
   }
 
   async function exportFullSpriteSheetWithMetadata() {
     await exportFullSpriteSheetPngOnly()
+    flushProviderMessage(setProviderMessage, 'Full sprite sheet PNG and metadata JSON ready for download.')
     downloadTextFile(
       fullSpriteSheetImageFilename.replace(/\.png$/i, '.metadata.json'),
       exportFullSpriteSheetMetadata(project, {
@@ -2244,6 +2310,14 @@ function App() {
     }
 
     commitProject(updateLayerPropertiesInProject(project, selectedLayer.id, { name: nextName }))
+  }
+
+  function saveSelectedLayerGroup(nextGroup = layerGroupInputRef.current?.value ?? '') {
+    if (!selectedLayer || nextGroup.trim() === (selectedLayer.group ?? '')) {
+      return
+    }
+
+    commitProject(updateLayerPropertiesInProject(project, selectedLayer.id, { group: nextGroup }))
   }
 
   function setSelectedLayerEditable(editable: boolean) {
@@ -2813,6 +2887,24 @@ function App() {
               </button>
             </div>
             {providerMessage ? <p className="provider-message">{providerMessage}</p> : null}
+            {providerReview ? (
+              <section className="provider-review" aria-label="Draft review">
+                <strong>{providerReview.title}</strong>
+                <dl>
+                  {providerReview.metrics.map((metric) => (
+                    <div key={metric.label}>
+                      <dt>{metric.label}</dt>
+                      <dd>{metric.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+                <ul>
+                  {providerReview.rows.map((row) => (
+                    <li key={row}>{row}</li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
             <ProviderDetails details={providerDetails} />
             <p className="status-line">
               SpriteWrite pads plain prompts into focused frame edits, single-frame drafts, or
@@ -2826,17 +2918,27 @@ function App() {
             <div className="segmented">
               <button
                 type="button"
+                aria-pressed={tool === 'paint'}
                 className={tool === 'paint' ? 'active' : ''}
                 onClick={() => setTool('paint')}
               >
-                Paint
+                <span
+                  className="tool-glyph tool-glyph-paint"
+                  style={{ '--tool-color': selectedColor?.hex ?? '#8de06f' } as CSSProperties}
+                  aria-hidden="true"
+                />
+                <span>Paint</span>
+                <kbd>P</kbd>
               </button>
               <button
                 type="button"
+                aria-pressed={tool === 'erase'}
                 className={tool === 'erase' ? 'active' : ''}
                 onClick={() => setTool('erase')}
               >
-                Erase
+                <span className="tool-glyph tool-glyph-erase" aria-hidden="true" />
+                <span>Erase</span>
+                <kbd>E</kbd>
               </button>
             </div>
           </section>
@@ -2993,32 +3095,39 @@ function App() {
               </button>
             </div>
             <div className="layer-list">
-              {selectedFrame.layers.map((layer) => (
-                <div
-                  key={layer.id}
-                  className={`layer-row ${selectedLayerId === layer.id ? 'active' : ''}`}
-                >
-                  <button
-                    type="button"
-                    className="layer-main"
-                    onClick={() => setSelectedLayerId(layer.id)}
-                  >
-                    <strong>{layer.name}</strong>
-                    <span>
-                      {layer.visible ? 'Visible' : 'Hidden'} | {layer.editable ? 'Editable' : 'Locked'} |{' '}
-                      {layer.exportable !== false ? 'Exports' : 'No export'} | {Object.keys(layer.cells).length} cells
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    className="layer-toggle"
-                    onClick={() => toggleLayerVisibility(layer.id)}
-                    title={layer.visible ? 'Hide layer' : 'Show layer'}
-                  >
-                    {layer.visible ? 'Hide' : 'Show'}
-                  </button>
-                </div>
-              ))}
+              {selectedFrame.layers.map((layer, index) => {
+                const groupLabel = getLayerGroupLabel(layer.group)
+                const previousGroupLabel = getLayerGroupLabel(selectedFrame.layers[index - 1]?.group)
+                const showGroupHeading = index === 0 || groupLabel !== previousGroupLabel
+
+                return (
+                  <Fragment key={layer.id}>
+                    {showGroupHeading ? <div className="layer-group-heading">{groupLabel}</div> : null}
+                    <div className={`layer-row ${selectedLayerId === layer.id ? 'active' : ''}`}>
+                      <button
+                        type="button"
+                        className="layer-main"
+                        onClick={() => setSelectedLayerId(layer.id)}
+                      >
+                        <strong>{layer.name}</strong>
+                        <span>
+                          {layer.visible ? 'Visible' : 'Hidden'} | {layer.editable ? 'Editable' : 'Locked'} |{' '}
+                          {layer.exportable !== false ? 'Exports' : 'No export'} | {Object.keys(layer.cells).length}{' '}
+                          cells
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="layer-toggle"
+                        onClick={() => toggleLayerVisibility(layer.id)}
+                        title={layer.visible ? 'Hide layer' : 'Show layer'}
+                      >
+                        {layer.visible ? 'Hide' : 'Show'}
+                      </button>
+                    </div>
+                  </Fragment>
+                )
+              })}
             </div>
             {selectedLayer ? (
               <div className="layer-inspector">
@@ -3032,6 +3141,21 @@ function App() {
                       onBlur={(event) => saveSelectedLayerName(event.target.value)}
                     />
                     <button type="button" onClick={() => saveSelectedLayerName()}>
+                      Save
+                    </button>
+                  </div>
+                </label>
+                <label>
+                  Folder
+                  <div className="inline-control">
+                    <input
+                      key={`${selectedLayer.id}-group`}
+                      ref={layerGroupInputRef}
+                      defaultValue={selectedLayer.group ?? ''}
+                      onBlur={(event) => saveSelectedLayerGroup(event.target.value)}
+                      placeholder="Ungrouped"
+                    />
+                    <button type="button" onClick={() => saveSelectedLayerGroup()}>
                       Save
                     </button>
                   </div>
@@ -3386,104 +3510,116 @@ function App() {
             </p>
             {selectedFrame ? (
               <div className="frame-inspector">
-                <label>
-                  Frame name
-                  <input
-                    key={`${selectedFrame.id}-name`}
-                    ref={frameNameInputRef}
-                    defaultValue={selectedFrame.name}
-                    onBlur={() => saveSelectedFrameProperties()}
-                  />
-                </label>
-                <label>
-                  Duration
-                  <div className="inline-control">
-                    <input
-                      type="number"
-                      min="1"
-                      value={selectedFrame.durationMs}
-                      onChange={(event) => {
-                        const durationMs = Math.max(1, Math.round(Number(event.target.value) || 1))
-                        commitProject(
-                          updateFramePropertiesInProject(project, selectedFrame.id, {
-                            durationMs,
-                          }),
-                        )
-                      }}
-                    />
-                    <button type="button" onClick={() => saveSelectedFrameProperties()}>
-                      Save
-                    </button>
-                  </div>
-                </label>
-                <div className="form-grid">
+                <section className="frame-inspector-group" aria-labelledby="frame-inspector-identity">
+                  <h3 id="frame-inspector-identity">Identity</h3>
                   <label>
-                    Anchor X
+                    Frame name
                     <input
-                      type="number"
-                      min="0"
-                      max={project.canvas.width - 1}
-                      value={selectedFrame.anchor.x}
-                      onChange={(event) => updateSelectedFrameAnchor('x', Number(event.target.value))}
-                    />
-                  </label>
-                  <label>
-                    Anchor Y
-                    <input
-                      type="number"
-                      min="0"
-                      max={project.canvas.height - 1}
-                      value={selectedFrame.anchor.y}
-                      onChange={(event) => updateSelectedFrameAnchor('y', Number(event.target.value))}
-                    />
-                  </label>
-                </div>
-                <label>
-                  Frame notes
-                  <textarea
-                    key={`${selectedFrame.id}-notes`}
-                    ref={frameNotesInputRef}
-                    defaultValue={selectedFrame.notes ?? ''}
-                    onBlur={() => saveSelectedFrameProperties()}
-                  />
-                </label>
-                <label>
-                  Tags
-                  <div className="inline-control">
-                    <input
-                      key={`${selectedFrame.id}-tags`}
-                      ref={frameTagsInputRef}
-                      defaultValue={(selectedFrame.tags ?? []).join(', ')}
+                      key={`${selectedFrame.id}-name`}
+                      ref={frameNameInputRef}
+                      defaultValue={selectedFrame.name}
                       onBlur={() => saveSelectedFrameProperties()}
                     />
-                    <button type="button" onClick={() => saveSelectedFrameProperties()}>
-                      Save
-                    </button>
-                  </div>
-                </label>
-                <label className="toggle-row">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(selectedFrame.hitbox)}
-                    onChange={(event) => setSelectedFrameHitboxEnabled(event.target.checked)}
-                  />
-                  Hitbox metadata
-                </label>
-                {selectedFrame.hitbox ? (
+                  </label>
+                </section>
+                <section className="frame-inspector-group" aria-labelledby="frame-inspector-timing">
+                  <h3 id="frame-inspector-timing">Timing & Anchor</h3>
+                  <label>
+                    Duration
+                    <div className="inline-control">
+                      <input
+                        type="number"
+                        min="1"
+                        value={selectedFrame.durationMs}
+                        onChange={(event) => {
+                          const durationMs = Math.max(1, Math.round(Number(event.target.value) || 1))
+                          commitProject(
+                            updateFramePropertiesInProject(project, selectedFrame.id, {
+                              durationMs,
+                            }),
+                          )
+                        }}
+                      />
+                      <button type="button" onClick={() => saveSelectedFrameProperties()}>
+                        Save
+                      </button>
+                    </div>
+                  </label>
                   <div className="form-grid">
-                    {(['x', 'y', 'width', 'height'] as const).map((key) => (
-                      <label key={key}>
-                        {key}
-                        <input
-                          type="number"
-                          min={key === 'width' || key === 'height' ? 1 : 0}
-                          value={selectedFrame.hitbox?.[key] ?? 0}
-                          onChange={(event) => updateSelectedFrameHitbox(key, Number(event.target.value))}
-                        />
-                      </label>
-                    ))}
+                    <label>
+                      Anchor X
+                      <input
+                        type="number"
+                        min="0"
+                        max={project.canvas.width - 1}
+                        value={selectedFrame.anchor.x}
+                        onChange={(event) => updateSelectedFrameAnchor('x', Number(event.target.value))}
+                      />
+                    </label>
+                    <label>
+                      Anchor Y
+                      <input
+                        type="number"
+                        min="0"
+                        max={project.canvas.height - 1}
+                        value={selectedFrame.anchor.y}
+                        onChange={(event) => updateSelectedFrameAnchor('y', Number(event.target.value))}
+                      />
+                    </label>
                   </div>
-                ) : null}
+                </section>
+                <section className="frame-inspector-group" aria-labelledby="frame-inspector-notes">
+                  <h3 id="frame-inspector-notes">Notes & Tags</h3>
+                  <label>
+                    Frame notes
+                    <textarea
+                      key={`${selectedFrame.id}-notes`}
+                      ref={frameNotesInputRef}
+                      defaultValue={selectedFrame.notes ?? ''}
+                      onBlur={() => saveSelectedFrameProperties()}
+                    />
+                  </label>
+                  <label>
+                    Tags
+                    <div className="inline-control">
+                      <input
+                        key={`${selectedFrame.id}-tags`}
+                        ref={frameTagsInputRef}
+                        defaultValue={(selectedFrame.tags ?? []).join(', ')}
+                        onBlur={() => saveSelectedFrameProperties()}
+                      />
+                      <button type="button" onClick={() => saveSelectedFrameProperties()}>
+                        Save
+                      </button>
+                    </div>
+                  </label>
+                </section>
+                <section className="frame-inspector-group" aria-labelledby="frame-inspector-hitbox">
+                  <h3 id="frame-inspector-hitbox">Hitbox</h3>
+                  <label className="toggle-row">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(selectedFrame.hitbox)}
+                      onChange={(event) => setSelectedFrameHitboxEnabled(event.target.checked)}
+                    />
+                    Hitbox metadata
+                  </label>
+                  {selectedFrame.hitbox ? (
+                    <div className="form-grid">
+                      {(['x', 'y', 'width', 'height'] as const).map((key) => (
+                        <label key={key}>
+                          {key}
+                          <input
+                            type="number"
+                            min={key === 'width' || key === 'height' ? 1 : 0}
+                            value={selectedFrame.hitbox?.[key] ?? 0}
+                            onChange={(event) => updateSelectedFrameHitbox(key, Number(event.target.value))}
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  ) : null}
+                </section>
               </div>
             ) : null}
           </section>

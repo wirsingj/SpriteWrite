@@ -83,6 +83,7 @@ Use this after each Codex pass. The goal is not ceremony; the goal is to keep Sp
 - [ ] Keyboard shortcuts do not fire while typing in fields.
 - [ ] Keyboard shortcuts ignoring typing fields are covered by a UI smoke test.
 - [ ] Fixed paint/erase shortcuts work and do not fire while typing.
+- [ ] Legacy saved custom paint/erase shortcut preferences are ignored while no customization UI exists.
 - [ ] Arrow shortcuts move between frames.
 - [ ] Arrow frame-navigation shortcuts are covered by a UI smoke test.
 - [ ] Command palette opens with `Ctrl+K`.
@@ -94,6 +95,7 @@ Use this after each Codex pass. The goal is not ceremony; the goal is to keep Sp
 - [ ] Layer export toggles exclude visible guide/reference layers from PNG exports.
 - [ ] Layer export toggle is covered by a UI smoke test.
 - [ ] Layer blend modes are explicit data, exported in metadata, and covered by raster/UI tests.
+- [ ] Layer group/folder labels are explicit metadata, exported in metadata, and do not change flat render order.
 - [ ] Layer export presets are covered by a UI smoke test.
 
 ## App Shell Audit
@@ -141,6 +143,7 @@ Use this after each Codex pass. The goal is not ceremony; the goal is to keep Sp
 - [ ] Ollama model refresh/download/main-generate flows are covered with stubbed-fetch tests.
 - [ ] Broad Ollama character/animation prompts route to structured animation-draft JSON, not selected-frame noise.
 - [ ] Broad Ollama animation drafts create 3-6 editable frames only after validation/coherence checks pass.
+- [ ] Accepted structured Ollama drafts show a compact review summary before raw provider JSON details.
 - [ ] AI assistance remains constrained co-editing: structured patches, frame drafts, palette suggestions, or layer operations, never irreversible raster replacement.
 - [ ] Future AI operations preserve fixed dimensions, palette constraints, frame intent, neighboring-frame context, silhouette/identity constraints, and user preview/accept/reject/undo.
 - [ ] Invalid selected-frame Ollama patches show errors and do not render proposal overlays on the canvas.
@@ -178,7 +181,9 @@ Use this after each Codex pass. The goal is not ceremony; the goal is to keep Sp
 - [ ] Full sprite sheet metadata frame regions match PNG layout.
 - [ ] Metadata includes image filename, sheet dimensions, cell size, rows, columns, scale, margin, spacing, animation ordering, row index, frame column, FPS, loop behavior, duration, anchor, tags, and hitbox when present.
 - [ ] Canvas PNG export uses the tested RGBA renderer.
-- [ ] Canvas wrapper tests verify ImageData copy, smoothing disabled, and PNG blob calls.
+- [ ] PNG blob export uses the tested RGBA renderer and deterministic PNG encoder.
+- [ ] Canvas wrapper tests verify ImageData copy and smoothing disabled.
+- [ ] PNG encoder tests verify golden bytes and PNG blob wrapping.
 - [ ] Exported project JSON re-imports.
 - [ ] Exported full sprite sheet can be imported by common game workflows as a grid/frame sheet.
 - [ ] "Sprite Sheet" means fixed row/column output; "Packed Atlas" is not used unless arbitrary rectangle packing exists.

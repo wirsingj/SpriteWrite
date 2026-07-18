@@ -32,6 +32,7 @@ Canvas rendering, editor grid lines, checkerboard backgrounds, selection outline
 - Visible layers are alpha-composited in layer order.
 - A layer must be both visible and exportable to render into PNG output.
 - Visible non-exportable layers are editor guidance only and must not appear in PNG output.
+- Optional layer group/folder labels are metadata only; they do not affect render order or inclusion.
 - Layer opacity affects exported RGBA pixels.
 - Normal, multiply, and screen layer blend modes affect exported RGBA pixels.
 - Frame dimensions are deterministic.
@@ -42,10 +43,10 @@ Canvas rendering, editor grid lines, checkerboard backgrounds, selection outline
 
 ## Tested Pixel Renderer
 
-SpriteWrite exports now flow through a pure RGBA renderer before canvas/PNG output:
+SpriteWrite exports now flow through a pure RGBA renderer before PNG output:
 
 ```text
-SpriteProject -> export layout -> RGBA buffer -> canvas/ImageData -> PNG
+SpriteProject -> export layout -> RGBA buffer -> PNG encoder -> PNG blob
 ```
 
 The pure renderer returns:
@@ -58,9 +59,9 @@ The pure renderer returns:
 }
 ```
 
-`data` is RGBA ordered. This buffer is the tested export pixel source. Canvas export is a thin wrapper that copies the buffer into `ImageData` and asks the browser for a PNG blob.
+`data` is RGBA ordered. This buffer is the tested export pixel source. PNG export uses a small deterministic encoder from RGBA rows to RGBA PNG bytes, then wraps those bytes in an `image/png` blob. Canvas helpers remain available for browser display and ImageData copy checks, but PNG export does not depend on browser `canvas.toBlob`.
 
-The renderer tests cover transparent alpha, exact palette RGBA values, scale mapping, hidden layer exclusion, non-exportable layer exclusion, deterministic visible-layer order, alpha compositing for layer opacity, multiply/screen blend behavior, animation-strip regions, full sprite-sheet row/column regions, transparent margins/spacing, transparent padding cells, frame order, and metadata/layout agreement. Canvas wrapper tests cover ImageData copy behavior, disabled smoothing, and `image/png` blob export calls.
+The renderer tests cover transparent alpha, exact palette RGBA values, scale mapping, hidden layer exclusion, non-exportable layer exclusion, deterministic visible-layer order, alpha compositing for layer opacity, multiply/screen blend behavior, animation-strip regions, full sprite-sheet row/column regions, transparent margins/spacing, transparent padding cells, frame order, and metadata/layout agreement. PNG encoder tests cover golden bytes and `image/png` blob wrapping; export wrapper tests decode PNG blobs for current-frame and full-sheet smoke checks.
 
 ## Current Frame PNG
 
@@ -72,6 +73,7 @@ For current-frame PNG export:
 - Background is transparent.
 - Only project cell data from visible exportable layers is rendered.
 - Visible layer pixels are alpha-composited in layer order.
+- Layer group/folder labels do not change pixel output.
 - At scale N, each cell expands to an N by N block of identical RGBA pixels.
 
 Current-frame PNG is the primary static-asset export path for icons, buttons, backgrounds, props, and one-frame sprites.

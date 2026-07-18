@@ -40,6 +40,7 @@ export type LayerBlendMode = 'normal' | 'multiply' | 'screen'
 export interface SpriteLayer {
   id: LayerId
   name: string
+  group?: string
   visible: boolean
   exportable: boolean
   editable: boolean
@@ -134,6 +135,7 @@ export interface FullSpriteSheetAnimationMetadata {
 export interface ExportedLayerMetadata {
   id: LayerId
   name: string
+  group?: string
   index: number
   visible: boolean
   exportable: boolean

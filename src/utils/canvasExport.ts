@@ -9,6 +9,7 @@ import {
   renderFrameToRgbaBuffer,
   type RgbaBuffer,
 } from '../domain/exportRaster'
+import { rgbaBufferToPngBlob } from './pngExport'
 import type {
   FrameId,
   FullSpriteSheetExportOptions,
@@ -41,7 +42,7 @@ export function rgbaBufferToCanvas(buffer: RgbaBuffer): HTMLCanvasElement {
 }
 
 export function exportFramePng(project: SpriteProject, frameId: FrameId, scale = 1): Promise<Blob> {
-  return canvasToBlob(renderFrameToCanvas(project, frameId, scale))
+  return Promise.resolve(rgbaBufferToPngBlob(renderFrameToRgbaBuffer(project, frameId, { scale })))
 }
 
 export function exportSpritesheetPng(
@@ -49,14 +50,14 @@ export function exportSpritesheetPng(
   animationId: string,
   options: Partial<Omit<SpriteSheetExportOptions, 'animationId'>> = {},
 ): Promise<Blob> {
-  return canvasToBlob(rgbaBufferToCanvas(renderAnimationToRgbaBuffer(project, animationId, options)))
+  return Promise.resolve(rgbaBufferToPngBlob(renderAnimationToRgbaBuffer(project, animationId, options)))
 }
 
 export function exportFullSpriteSheetPng(
   project: SpriteProject,
   options: FullSpriteSheetExportOptions = {},
 ): Promise<Blob> {
-  return canvasToBlob(rgbaBufferToCanvas(renderFullSpriteSheetToRgbaBuffer(project, options)))
+  return Promise.resolve(rgbaBufferToPngBlob(renderFullSpriteSheetToRgbaBuffer(project, options)))
 }
 
 export function exportSpritesheetMetadata(
@@ -76,16 +77,4 @@ export function exportFullSpriteSheetMetadata(
 
 export function exportFrameMetadata(project: SpriteProject, frameId: FrameId): string {
   return JSON.stringify(createFrameExportMetadata(project, frameId), null, 2)
-}
-
-function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => {
-      if (blob) {
-        resolve(blob)
-      } else {
-        reject(new Error('Could not export canvas as PNG.'))
-      }
-    }, 'image/png')
-  })
 }

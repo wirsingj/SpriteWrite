@@ -384,6 +384,16 @@
   cursor: grab;
 }
 
+.atlas-frame-strip .frame-index {
+  color: var(--heading);
+  font-weight: 700;
+}
+
+.atlas-frame-strip .frame-duration {
+  color: var(--muted);
+  font-size: 10px;
+}
+
 .atlas-frame-strip button.active {
   border-color: var(--accent);
   background: var(--control-active);
@@ -636,6 +646,17 @@ button:disabled {
   opacity: 0.45;
 }
 
+kbd {
+  min-width: 18px;
+  padding: 1px 5px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+}
+
 select,
 input,
 textarea {
@@ -762,16 +783,43 @@ label {
 
 .frame-inspector {
   display: grid;
-  gap: 8px;
+  gap: 10px;
   padding: 9px;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.035);
   border-radius: 8px;
 }
 
+.frame-inspector-group {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.frame-inspector-group + .frame-inspector-group {
+  padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.frame-inspector-group h3 {
+  margin: 0;
+  color: var(--heading);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
 .layer-list {
   display: grid;
   gap: 7px;
+}
+
+.layer-group-heading {
+  padding: 2px 2px 0;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
 }
 
 .layer-actions {
@@ -1042,6 +1090,55 @@ label {
   border-radius: 8px;
 }
 
+.provider-review {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.035);
+  border-radius: 8px;
+}
+
+.provider-review strong {
+  color: var(--heading);
+  font-size: 12px;
+}
+
+.provider-review dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+
+.provider-review dl div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.provider-review dt,
+.provider-review li {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.provider-review dd {
+  margin: 0;
+  overflow: hidden;
+  color: var(--heading);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.provider-review ul {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding-left: 16px;
+}
+
 .provider-details summary {
   cursor: pointer;
   padding: 7px 8px;
@@ -1156,6 +1253,36 @@ label {
 .tools-panel > section:first-of-type .segmented {
   display: grid;
   grid-template-columns: 1fr 1fr;
+}
+
+.tools-panel > section:first-of-type .segmented button {
+  display: grid;
+  grid-template-columns: 18px 1fr auto;
+  align-items: center;
+  gap: 7px;
+  text-align: left;
+}
+
+.tool-glyph {
+  position: relative;
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  background: var(--panel-raised);
+}
+
+.tool-glyph-paint {
+  background:
+    linear-gradient(135deg, transparent 0 42%, rgba(255, 255, 255, 0.34) 43% 50%, transparent 51%),
+    var(--tool-color, var(--accent));
+}
+
+.tool-glyph-erase {
+  background:
+    linear-gradient(135deg, transparent 0 36%, var(--muted) 37% 46%, transparent 47%),
+    linear-gradient(135deg, var(--panel-raised) 0 48%, rgba(255, 255, 255, 0.18) 49% 52%, var(--panel-raised) 53%);
 }
 
 .dock-tabs,

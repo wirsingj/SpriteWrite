@@ -7,7 +7,9 @@ describe('project templates', () => {
   it('creates valid projects from every template', () => {
     SPRITE_PROJECT_TEMPLATES.forEach((template) => {
       const project = template.createProject({ name: template.name })
-      expect(validateProject(project).valid).toBe(true)
+      const validation = validateProject(project)
+      expect(validation.errors).toEqual([])
+      expect(validation.valid).toBe(true)
     })
   })
 
@@ -58,6 +60,32 @@ describe('project templates', () => {
     expect(button.canvas).toEqual({ width: 64, height: 24 })
     expect(icon.palette.map((color) => color.id)).not.toContain('slime_mid')
     expect(button.palette.map((color) => color.id)).not.toContain('slime_mid')
+  })
+
+  it('creates broader starter recipes for tiles, props, backgrounds, and effects', () => {
+    const tile = getProjectTemplate('tile-grass-32').createProject({ name: 'Grass Tiles' })
+    const prop = getProjectTemplate('prop-crate-32').createProject({ name: 'Crate' })
+    const background = getProjectTemplate('background-band-64x32').createProject({ name: 'Horizon' })
+    const effect = getProjectTemplate('effect-burst-32').createProject({ name: 'Burst' })
+
+    expect(tile.assetType).toBe('tile')
+    expect(tile.animations[0]).toMatchObject({ id: 'variants', name: 'Variants' })
+    expect(tile.frames).toHaveLength(4)
+    expect(Object.keys(tile.frames[0].layers[0].cells).length).toBeGreaterThan(80)
+
+    expect(prop.assetType).toBe('prop')
+    expect(prop.canvas).toEqual({ width: 32, height: 32 })
+    expect(prop.frames[0].tags).toContain('object')
+    expect(Object.keys(prop.frames[0].layers[0].cells).length).toBeGreaterThan(80)
+
+    expect(background.assetType).toBe('background')
+    expect(background.canvas).toEqual({ width: 64, height: 32 })
+    expect(background.frames[0].tags).toContain('parallax')
+
+    expect(effect.assetType).toBe('effect')
+    expect(effect.animations[0]).toMatchObject({ id: 'burst', fps: 12 })
+    expect(effect.frames).toHaveLength(4)
+    expect(effect.frames.every((frame) => frame.tags?.includes('burst'))).toBe(true)
   })
 
   it('creates an ooze demo with animation and frame data', () => {

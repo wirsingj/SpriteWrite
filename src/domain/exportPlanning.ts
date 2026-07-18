@@ -154,6 +154,7 @@ export function createSpriteSheetLayout(
     firstProjectFrame?.layers.map((layer, index) => ({
       id: layer.id,
       name: layer.name,
+      group: layer.group,
       index,
       visible: layer.visible,
       exportable: layer.exportable !== false,

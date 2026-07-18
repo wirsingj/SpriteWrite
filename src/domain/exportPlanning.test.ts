@@ -68,6 +68,9 @@ describe('export planning', () => {
 
   it('creates metadata that matches the layout', () => {
     const project = createDefaultProject()
+    project.frames.forEach((frame) => {
+      frame.layers[0].group = 'Art'
+    })
     const layout = createSpriteSheetLayout(project, 'idle', { margin: 1, spacing: 2 })
     const metadata = createSpriteSheetExportMetadata(project, 'idle', { margin: 1, spacing: 2 })
 
@@ -87,7 +90,7 @@ describe('export planning', () => {
       spacing: layout.spacing,
     })
     expect(metadata.frames).toEqual(layout.frames)
-    expect(metadata.layers[0]).toMatchObject({ id: 'base', blendMode: 'normal' })
+    expect(metadata.layers[0]).toMatchObject({ id: 'base', group: 'Art', blendMode: 'normal' })
     expect(metadata.grid).toEqual({
       columns: layout.frameCount,
       rows: 1,

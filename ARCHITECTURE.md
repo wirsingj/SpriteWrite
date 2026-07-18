@@ -33,7 +33,7 @@ Key model concepts:
 - Fixed palette of `PaletteColor` IDs.
 - Optional broad asset type such as character, creature, tile, environment, prop, object, background, effect, UI, icon, or custom.
 - Animations with ordered frame IDs.
-- Frames with duration, anchor, optional hitbox, and layers.
+- Frames with duration, anchor, optional hitbox, and layers. Layers may carry an optional group/folder label, but render and patch order remains the flat layer order.
 - Layers with sparse `"x,y": "colorId"` cell maps.
 - Transparent cells are omitted from layer cell maps.
 - Patch operations are explicit `set` and `clear` cell edits.
@@ -52,7 +52,8 @@ The model is engine-neutral. OozeTactics and Godot can consume exported artifact
 - `src/domain/exportPlanning.ts`: deterministic sprite sheet layout and metadata planning.
 - `src/domain/exportRaster.ts`: pure RGBA export rendering.
 - `src/providers/*`: AI patch provider contracts and implementations.
-- `src/utils/canvasExport.ts`: browser canvas/blob wrappers around the tested RGBA export buffer.
+- `src/utils/canvasExport.ts`: browser canvas helpers plus PNG blob export wrappers around the tested RGBA export buffer.
+- `src/utils/pngExport.ts`: small deterministic RGBA-to-PNG encoder used by PNG exports.
 - `src/utils/download.ts`: browser download helpers.
 - `src/components/*`: extracted React UI surfaces such as the start screen, command palette, color picker, atlas timeline, full-sheet workspace, mini sprite thumbnail, and provider-details disclosure.
 - `src/App.tsx`: app orchestration, editor state, project mutations, provider workflow, export actions, browser draft state, and composition of extracted UI components.
@@ -102,7 +103,7 @@ Future AI operations should use the same principle: a provider may suggest edita
 PNG export:
 
 ```text
-SpriteProject -> createSpriteSheetLayout() or createFullSpriteSheetLayout() -> render*ToRgbaBuffer() -> ImageData/canvas -> PNG blob
+SpriteProject -> createSpriteSheetLayout() or createFullSpriteSheetLayout() -> render*ToRgbaBuffer() -> PNG encoder -> PNG blob
 ```
 
 Project save:
@@ -119,7 +120,7 @@ SpriteProject -> Project JSON export
 - Patch validation must reject out-of-bounds cells, unknown colors, malformed operations, missing animations/frames/layers, and locked layer edits.
 - Exported PNGs must not contain editor grid, checkerboard, onion skin, selection, or patch-preview overlays.
 - Only layers that are both visible and exportable should render into PNG output.
-- Export metadata must match the actual sprite sheet layout.
+- Export metadata must match the actual sprite sheet layout, including flat layer order and optional layer group labels.
 - Animation Strip export is one selected animation in a horizontal row.
 - Full Sprite Sheet export is a fixed row/column grid: one animation per row, one frame per column, transparent padding after shorter animations. It is not a Packed Atlas.
 - Export profiles should be generic first. Godot, Unity, or custom importer profiles can layer on top of the boring PNG/JSON contract later.

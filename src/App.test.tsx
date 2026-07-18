@@ -35,6 +35,10 @@ describe('App shell', () => {
     expect(container.textContent).toContain('SpriteWrite')
     expect(container.textContent).toContain('Draw static or animated pixel assets')
     expect(container.textContent).toContain('Blank 64x64')
+    expect(container.textContent).toContain('Grass Tile Variants 32x32')
+    expect(container.textContent).toContain('Prop Crate 32x32')
+    expect(container.textContent).toContain('Background Band 64x32')
+    expect(container.textContent).toContain('Effect Burst 32x32')
     expect(container.textContent).toContain('Hero 32x32 Sprite Sheet Demo')
     expect(container.textContent).toContain('Ooze 32x32 Demo')
   })
@@ -210,6 +214,7 @@ describe('App shell', () => {
     clickButtonWithin('.atlas-batch-metadata', 'Set Duration')
 
     expect(container.textContent).toContain('Set duration to 417ms on 2 selected frames.')
+    expect(getRequiredElement('.atlas-frame-strip button.active .frame-duration').textContent).toBe('417ms')
 
     const { capturedBlob } = setupDownloadCapture()
     clickButton('Export Project JSON')
@@ -445,6 +450,12 @@ describe('App shell', () => {
     await clickButtonAsync('Ask Ollama')
 
     expect(container.textContent).toContain('Ollama drafted 4 editable frames for "Hero Idle".')
+    const review = getRequiredElement('.provider-review')
+    expect(review.textContent).toContain('Draft review: Hero Idle')
+    expect(review.textContent).toContain('Frames')
+    expect(review.textContent).toContain('4')
+    expect(review.textContent).toContain('Patch ops')
+    expect(review.textContent).toContain('Hero Idle 1 - 14 operations')
     expect(fetch).toHaveBeenCalledWith(
       'http://localhost:11434/api/generate',
       expect.objectContaining({ method: 'POST' }),
@@ -583,6 +594,13 @@ describe('App shell', () => {
 
     expect(container.textContent).toContain('Ollama drafted 4 animation rows with 12 editable frames.')
     expect(container.textContent).toContain('Full Sprite Sheet View')
+    const review = getRequiredElement('.provider-review')
+    expect(review.textContent).toContain('Draft review: animation set')
+    expect(review.textContent).toContain('Rows')
+    expect(review.textContent).toContain('4')
+    expect(review.textContent).toContain('Frames')
+    expect(review.textContent).toContain('12')
+    expect(review.textContent).toContain('Grass A - 3 frames')
 
     const { capturedBlob } = setupDownloadCapture()
     clickButton('Export Project JSON')
@@ -942,6 +960,54 @@ describe('App shell', () => {
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'p' }))
     })
     expect(container.textContent).toContain('Ink')
+  })
+
+  it('ignores legacy saved shortcut preferences after customization was removed', () => {
+    window.localStorage.setItem('spritewrite.shortcuts.v1', JSON.stringify({ paint: 'x', erase: 'z' }))
+
+    act(() => {
+      root.render(<App />)
+    })
+
+    clickButton('New Project')
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'e' }))
+    })
+    expect(container.textContent).toContain('Eraser')
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'x' }))
+    })
+    expect(container.textContent).toContain('Eraser')
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'p' }))
+    })
+    expect(container.textContent).toContain('Ink')
+  })
+
+  it('shows accessible pressed state and shortcut hints for drawing tools', () => {
+    act(() => {
+      root.render(<App />)
+    })
+
+    clickButton('New Project')
+
+    const paintButton = getButtonWithin('.tools-panel', 'Paint')
+    const eraseButton = getButtonWithin('.tools-panel', 'Erase')
+
+    expect(paintButton.getAttribute('aria-pressed')).toBe('true')
+    expect(eraseButton.getAttribute('aria-pressed')).toBe('false')
+    expect(paintButton.textContent).toContain('P')
+    expect(eraseButton.textContent).toContain('E')
+
+    act(() => {
+      eraseButton.click()
+    })
+
+    expect(paintButton.getAttribute('aria-pressed')).toBe('false')
+    expect(eraseButton.getAttribute('aria-pressed')).toBe('true')
   })
 
   it('does not show the old shortcut settings panel in the drawing dock', () => {
@@ -1431,6 +1497,40 @@ describe('App shell', () => {
     expect(exported.frames[0].layers[0]).toMatchObject({ id: 'base', blendMode: 'screen' })
   })
 
+  it('assigns a layer folder label without changing flat export order', async () => {
+    act(() => {
+      root.render(<App />)
+    })
+
+    clickButton('New Project')
+    clickButtonWithin('.layer-actions', 'Add')
+
+    const folderInput = getInputByLabel('Folder')
+    setInputValue(folderInput, 'Effects')
+    const folderLabel = Array.from(container.querySelectorAll('label')).find((candidate) =>
+      candidate.textContent?.includes('Folder'),
+    )
+    const folderSave = folderLabel?.querySelector<HTMLButtonElement>('button')
+    if (!folderSave) {
+      throw new Error('Missing folder save button.')
+    }
+    act(() => {
+      folderSave.click()
+    })
+
+    expect(container.textContent).toContain('Ungrouped')
+    expect(container.textContent).toContain('Effects')
+
+    const { capturedBlob } = setupDownloadCapture()
+    clickButton('Export Project JSON')
+    const exported = JSON.parse((await capturedBlob.current?.text()) ?? '{}') as {
+      frames: Array<{ layers: Array<{ name: string; group?: string }> }>
+    }
+
+    expect(exported.frames[0].layers.map((layer) => layer.name)).toEqual(['Base', 'Layer 2'])
+    expect(exported.frames[0].layers[1]).toMatchObject({ name: 'Layer 2', group: 'Effects' })
+  })
+
   it('applies layer export presets from the layer inspector', async () => {
     act(() => {
       root.render(<App />)
@@ -1669,6 +1769,21 @@ describe('App shell', () => {
     })
   })
 
+  it('groups frame metadata controls by inspector context', () => {
+    act(() => {
+      root.render(<App />)
+    })
+
+    clickButton('New Project')
+
+    const frameInspector = getRequiredElement('.frame-inspector')
+    expect(frameInspector.textContent).toContain('Identity')
+    expect(frameInspector.textContent).toContain('Timing & Anchor')
+    expect(frameInspector.textContent).toContain('Notes & Tags')
+    expect(frameInspector.textContent).toContain('Hitbox')
+    expect(frameInspector.querySelectorAll('.frame-inspector-group')).toHaveLength(4)
+  })
+
   it('edits frame hitbox metadata and preserves it in exported project JSON', async () => {
     act(() => {
       root.render(<App />)
@@ -1787,7 +1902,7 @@ describe('App shell', () => {
     })
 
     clickButton('Open Hero Demo')
-    const { anchor, canvas, capturedBlob } = setupPngDownloadCapture()
+    const { anchor, capturedBlob, capturedBlobs } = setupPngDownloadCapture()
 
     await clickButtonAsync('Export Full Sprite Sheet PNG + Metadata JSON')
     await act(async () => {
@@ -1795,8 +1910,7 @@ describe('App shell', () => {
       await Promise.resolve()
     })
 
-    expect(canvas.width).toBe(160)
-    expect(canvas.height).toBe(128)
+    expect(capturedBlobs[0]?.type).toBe('image/png')
     expect(anchor.download).toBe('hero-sprite-demo-sprite-sheet@1x.metadata.json')
     const text = await capturedBlob.current?.text()
     expect(text).toContain('"formatName": "SpriteWrite"')
@@ -1805,6 +1919,7 @@ describe('App shell', () => {
     expect(text).toContain('"columnCount": 5')
     expect(text).toContain('"animationName": "Sword Stab"')
     expect(text).toContain('"frameId": "sword-stab-005"')
+    expect(container.textContent).toContain('Full sprite sheet PNG and metadata JSON ready for download.')
   })
 
   it('exports current frame PNG from the editor through a crisp canvas path', async () => {
@@ -1813,16 +1928,13 @@ describe('App shell', () => {
     })
 
     clickButton('New Project')
-    const { anchor, canvas, context, capturedBlob } = setupPngDownloadCapture()
+    const { anchor, capturedBlob } = setupPngDownloadCapture()
 
     await clickButtonAsync('Export Current Frame PNG')
 
     expect(anchor.download).toBe('idle-001@1x.png')
-    expect(canvas.width).toBe(32)
-    expect(canvas.height).toBe(32)
-    expect(context.imageSmoothingEnabled).toBe(false)
-    expect(context.putImageData).toHaveBeenCalled()
     expect(capturedBlob.current?.type).toBe('image/png')
+    expect(container.textContent).toContain('Current frame PNG ready for download.')
   })
 
   it('exports current animation strip PNG from the editor through a crisp canvas path', async () => {
@@ -1831,16 +1943,13 @@ describe('App shell', () => {
     })
 
     clickButton('New Project')
-    const { anchor, canvas, context, capturedBlob } = setupPngDownloadCapture()
+    const { anchor, capturedBlob } = setupPngDownloadCapture()
 
     await clickButtonAsync('Export Current Animation Strip PNG')
 
     expect(anchor.download).toBe('idle-animation-strip@1x.png')
-    expect(canvas.width).toBe(32)
-    expect(canvas.height).toBe(32)
-    expect(context.imageSmoothingEnabled).toBe(false)
-    expect(context.putImageData).toHaveBeenCalled()
     expect(capturedBlob.current?.type).toBe('image/png')
+    expect(container.textContent).toContain('Current animation strip PNG ready for download.')
   })
 
   it('exports full sprite sheet PNG from the editor through a crisp canvas path', async () => {
@@ -1849,16 +1958,13 @@ describe('App shell', () => {
     })
 
     clickButton('Open Hero Demo')
-    const { anchor, canvas, context, capturedBlob } = setupPngDownloadCapture()
+    const { anchor, capturedBlob } = setupPngDownloadCapture()
 
     await clickButtonAsync('Export Full Sprite Sheet PNG')
 
     expect(anchor.download).toBe('hero-sprite-demo-sprite-sheet@1x.png')
-    expect(canvas.width).toBe(160)
-    expect(canvas.height).toBe(128)
-    expect(context.imageSmoothingEnabled).toBe(false)
-    expect(context.putImageData).toHaveBeenCalled()
     expect(capturedBlob.current?.type).toBe('image/png')
+    expect(container.textContent).toContain('Full sprite sheet PNG ready for download.')
   })
 
   it('clears stale proposed edits after a provider failure', async () => {
@@ -1933,6 +2039,18 @@ describe('App shell', () => {
     }
 
     return select
+  }
+
+  function getInputByLabel(label: string): HTMLInputElement {
+    const labelElement = Array.from(container.querySelectorAll('label')).find((candidate) =>
+      candidate.textContent?.includes(label),
+    )
+    const input = labelElement?.querySelector<HTMLInputElement>('input')
+    if (!input) {
+      throw new Error(`Missing input "${label}".`)
+    }
+
+    return input
   }
 
   function undoWithKeyboard() {
@@ -2108,29 +2226,14 @@ describe('App shell', () => {
     anchor.click = vi.fn()
     anchor.remove = vi.fn()
     const capturedBlob: { current?: Blob } = {}
-    const context = {
-      imageSmoothingEnabled: true,
-      createImageData: vi.fn((width: number, height: number) => ({
-        data: new Uint8ClampedArray(width * height * 4),
-      })),
-      putImageData: vi.fn(),
-    } as unknown as CanvasRenderingContext2D
-    const canvas = {
-      width: 0,
-      height: 0,
-      getContext: vi.fn(() => context),
-      toBlob: vi.fn((callback: BlobCallback, type?: string) => {
-        const blob = new Blob(['png'], { type })
-        capturedBlob.current = blob
-        callback(blob)
-      }),
-    } as unknown as HTMLCanvasElement
+    const capturedBlobs: Blob[] = []
 
     Object.defineProperty(URL, 'createObjectURL', {
       configurable: true,
       value: vi.fn((blob: Blob | MediaSource) => {
         if (blob instanceof Blob) {
           capturedBlob.current = blob
+          capturedBlobs.push(blob)
         }
         return 'blob:frame-png'
       }),
@@ -2144,12 +2247,9 @@ describe('App shell', () => {
       if (tagName === 'a') {
         return anchor
       }
-      if (tagName === 'canvas') {
-        return canvas
-      }
       return originalCreateElement(tagName)
     })
 
-    return { anchor, canvas, context, capturedBlob }
+    return { anchor, capturedBlob, capturedBlobs }
   }
 })

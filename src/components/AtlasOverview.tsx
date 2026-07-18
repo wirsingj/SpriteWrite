@@ -188,6 +188,7 @@ export function AtlasOverview({
             </button>
             <div className="atlas-frame-strip">
               {animation.frameIds.map((frameId, index) => {
+                const frame = getFrame(project, frameId)
                 const selected = selectedFrameIds.has(frameId)
                 const active = selectedFrameId === frameId
                 const dragged = draggedFrameId === frameId
@@ -206,6 +207,9 @@ export function AtlasOverview({
                     className={className}
                     draggable
                     aria-pressed={selected}
+                    aria-label={`${animation.name} frame ${index + 1}${frame?.name ? `, ${frame.name}` : ''}, ${
+                      frame?.durationMs ?? 0
+                    }ms`}
                     onClick={(event: MouseEvent<HTMLButtonElement>) => {
                       onSelectFrame(animation.id, frameId, {
                         range: event.shiftKey,
@@ -226,10 +230,13 @@ export function AtlasOverview({
                       onFrameDrop(animation.id, frameId)
                     }}
                     onDragEnd={onFrameDragEnd}
-                    title={`${animation.name} frame ${index + 1}. Drag to reorder.`}
+                    title={`${animation.name} frame ${index + 1}${frame?.name ? ` (${frame.name})` : ''}, ${
+                      frame?.durationMs ?? 0
+                    }ms. Drag to reorder.`}
                   >
                     <MiniSprite project={project} frameId={frameId} />
-                    <span>{index + 1}</span>
+                    <span className="frame-index">{index + 1}</span>
+                    <span className="frame-duration">{frame?.durationMs ?? 0}ms</span>
                   </button>
                 )
               })}

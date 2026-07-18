@@ -386,10 +386,11 @@ describe('sprite data model', () => {
     expect(validateProject(nextProject).valid).toBe(true)
   })
 
-  it('updates layer name, lock state, export state, opacity, and blend mode across frames', () => {
+  it('updates layer name, group, lock state, export state, opacity, and blend mode across frames', () => {
     const project = addLayerToProject(createDefaultProject(), { id: 'detail', name: 'Detail' })
     const nextProject = updateLayerPropertiesInProject(project, 'detail', {
       name: 'Glow',
+      group: 'Effects',
       editable: false,
       exportable: false,
       opacity: 0.5,
@@ -401,6 +402,7 @@ describe('sprite data model', () => {
         const layer = getLayer(frame, 'detail')
         return (
           layer?.name === 'Glow' &&
+          layer.group === 'Effects' &&
           layer.editable === false &&
           layer.exportable === false &&
           layer.opacity === 0.5 &&

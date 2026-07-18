@@ -135,6 +135,14 @@ export function validateProject(input: unknown): ValidationResult<SpriteProject>
     frame.layers.forEach((layer) => {
       layer.exportable = layer.exportable ?? true
       layer.blendMode = layer.blendMode ?? 'normal'
+      if (typeof layer.group === 'string') {
+        const normalizedGroup = layer.group.trim()
+        if (normalizedGroup) {
+          layer.group = normalizedGroup
+        } else {
+          delete layer.group
+        }
+      }
     })
   })
 
@@ -303,6 +311,10 @@ function validateLayers(
     }
 
     validateNonEmptyString(layer.name, `${path} name`, errors)
+
+    if ('group' in layer && typeof layer.group !== 'string') {
+      errors.push(`${path} group must be a string when present.`)
+    }
 
     if (typeof layer.visible !== 'boolean') {
       errors.push(`${path} visible must be a boolean.`)
@@ -738,7 +750,9 @@ export function setLayerVisibilityInProject(
 export function updateLayerPropertiesInProject(
   project: SpriteProject,
   layerId: LayerId,
-  properties: Partial<Pick<SpriteLayer, 'name' | 'visible' | 'exportable' | 'editable' | 'opacity' | 'blendMode'>>,
+  properties: Partial<
+    Pick<SpriteLayer, 'name' | 'group' | 'visible' | 'exportable' | 'editable' | 'opacity' | 'blendMode'>
+  >,
 ): SpriteProject {
   if (project.frames.some((frame) => !frame.layers.some((layer) => layer.id === layerId))) {
     throw new Error(`Layer "${layerId}" must exist on every frame to update it.`)
@@ -746,6 +760,10 @@ export function updateLayerPropertiesInProject(
 
   if (properties.name !== undefined && properties.name.trim() === '') {
     throw new Error('Layer name must not be empty.')
+  }
+
+  if (properties.group !== undefined && typeof properties.group !== 'string') {
+    throw new Error('Layer group must be a string.')
   }
 
   if (
@@ -768,6 +786,14 @@ export function updateLayerPropertiesInProject(
 
     if (properties.name !== undefined) {
       layer.name = properties.name.trim()
+    }
+    if (properties.group !== undefined) {
+      const group = properties.group.trim()
+      if (group) {
+        layer.group = group
+      } else {
+        delete layer.group
+      }
     }
     if (properties.visible !== undefined) {
       layer.visible = properties.visible

@@ -41,12 +41,12 @@ Verified from repository docs and source inspection on 2026-07-01:
 
 - Vite, React, TypeScript, plain CSS, and Vitest app.
 - Home/start screen plus editor screen.
-- Project templates for blank assets, a hero sprite sheet demo, and a minimal ooze reference.
-- Structured `SpriteProject` data model with canvas, palette, animations, frames, layers, frame notes/tags, anchors, optional hitboxes, and metadata.
+- Project templates for blank assets, icon/UI starts, grass tile variants, prop crate, background band, effect burst, a hero sprite sheet demo, and a minimal ooze reference.
+- Structured `SpriteProject` data model with canvas, palette, animations, frames, flat ordered layers with optional group/folder labels, frame notes/tags, anchors, optional hitboxes, and metadata.
 - Sparse layer cell maps where transparent cells are omitted.
 - Canvas-first editor shell with a compact header, focused drawing/tool dock, Palette/Layers dock tabs, central pixel canvas, resizable bottom attached atlas/filmstrip, resizable right preview/context inspector, independently resizable preview viewport, and focused AI/export surfaces.
 - The visible app chrome now uses a graphite/dark Mac-like visual direction with Apple-blue selection/accent states and styled dark scrollbars. Avoid returning to the previous drab green app-wide theme.
-- Paint/erase tools, fixed paint/erase keyboard shortcuts, click-drag painting, palette editing, atlas rows with frame click, modifier multi-select, drag reorder, selected-frame duplicate/delete, selected-frame duration/notes/tags editing, center workspace modes for detailed frame editing or full sprite sheet viewing, animation controls, onion skin, preview with optional solid display background, center editor display background, in-app color picker popovers for palette/display colors, and snapshot undo/redo.
+- Paint/erase tools, fixed paint/erase keyboard shortcuts that ignore legacy hidden custom mappings, click-drag painting, palette editing, atlas rows with frame click, modifier multi-select, drag reorder, selected-frame duplicate/delete, selected-frame duration/notes/tags editing, center workspace modes for detailed frame editing or full sprite sheet viewing, animation controls, onion skin, preview with optional solid display background, center editor display background, in-app color picker popovers for palette/display colors, and snapshot undo/redo.
 - The React UI is no longer a single monolithic `App.tsx` surface. Stable UI pieces now live under `src/components/` for the start screen, command palette, color picker, atlas timeline, full-sheet workspace, mini sprite thumbnail, and provider details; `App.tsx` still coordinates stateful workflows.
 - Hero demo gives the app a richer default test fixture: 32x32 character asset, Idle/Jump/Crouch/Sword Stab rows, and 17 total editable frames. The start screen also includes a Hero Demo mini-preview card so you can inspect a sample frame before opening the full sheet. The ooze template remains as a tiny creature comparison reference and must not dominate product language.
 - Layer controls include add/delete/reorder/select/rename, visibility, PNG export inclusion, lock/editable state, opacity, normal/multiply/screen blend modes, and simple art/guide/shadow/highlight presets.
@@ -60,20 +60,20 @@ Verified from repository docs and source inspection on 2026-07-01:
 - Ollama broad animation drafts can now include structured `paletteAdditions`. SpriteWrite validates and merges those palette colors before validating frame operations, so a provider can propose appropriate asset colors, such as gold/orange coin colors, without SpriteWrite hard-coding the finished asset art.
 - Ollama broad asset prompts still have recipe rails for a few observed qwen-stable structural cases such as short grass tile variations, hero idle/cape, tentacle monster variations, and spinning-object fallback. Ordinary prompts such as rotating gold coin use direct provider-drafted editable frames with optional palette additions first; the compact spinning recipe is a fallback only after direct quality attempts fail.
 - Live local `qwen3:14b` probes on 2026-07-18 showed compact recipe prompts returning usable JSON quickly for grass tile variations, hero idle/cape, and tentacle creature variations. Raw all-cell prompts remain more fragile and slower.
-- Provider failures and rejected Ollama drafts now expose an expandable details payload with the padded prompt, model/base URL context, validation errors, and the attempted patch/draft JSON where available.
+- Accepted structured Ollama animation drafts expose a compact draft review with rows, frame counts, patch-operation totals, palette additions, quality-attempt count, and FPS where available. Provider failures and rejected Ollama drafts still expose an expandable details payload with the padded prompt, model/base URL context, validation errors, and the attempted patch/draft JSON where available.
 - Ollama requests now show attempt number and elapsed time in status/details, and app coverage verifies a second click after a rejected animation draft sends a second provider request.
 - Ollama animation-draft prompts now explicitly forbid rectangle-style `width`/`height` operation fields and tiny marker patches after observed `llama3.2:3b` output violated the cell-operation contract.
 - Ollama generate calls set `think: false` and temperature 0 after observed `qwen3:14b` output returned `{}` when thinking was left enabled/implicit. Selected-frame patch calls use JSON Schema structured output; animation drafts use lighter JSON mode plus SpriteWrite validation because multi-frame operation-array schemas can stall local qwen.
 - `npm run test:ollama` is a deliberate live quality probe that calls local `qwen3:14b` for natural prompts such as a 4-frame rotating golden coin and grass animation variations, then fails loudly with SpriteWrite critique details if the drafts do not match the requested intent. If qwen has stuck work from aborted requests, unloading the model with Ollama `keep_alive: 0` can clear the queue.
-- User-facing AI proposals are edits or drafts backed by JSON operations with validation, canvas preview, apply, and reject. Operation-level include/exclude/removal controls were removed from the normal creative surface to reduce UI noise; detailed returned JSON remains available through provider details.
+- User-facing AI proposals are edits or drafts backed by JSON operations with validation, canvas preview, apply, reject, and compact accepted-draft review summaries. Operation-level include/exclude/removal controls were removed from the normal creative surface to reduce UI noise; detailed returned JSON remains available through provider details.
 - Project JSON import/export exists.
-- PNG exports and sprite sheet metadata are derived through tested layout/raster/canvas export utilities.
-- Export supports current-frame PNG, current-animation horizontal strip PNG, full row-per-animation sprite sheet PNG, and full sprite sheet PNG plus metadata JSON. The fixed full sheet is not a packed atlas.
+- PNG exports and sprite sheet metadata are derived through tested layout/raster export utilities. PNG blob export now uses a deterministic RGBA-to-PNG encoder instead of depending on browser canvas `toBlob`.
+- Export supports current-frame PNG, current-animation horizontal strip PNG, full row-per-animation sprite sheet PNG, and full sprite sheet PNG plus metadata JSON. The fixed full sheet is not a packed atlas. Layer group labels are metadata only and do not change PNG render order.
 - UI resize interactions on right/preview/sheet panels now include pointer-cancel cleanup to avoid stale drag state after interrupted pointer interactions.
 
 ## Current Test State
 
-The repository contains Vitest tests for domain data functions, templates, export planning, export raster rendering, provider parsing, canvas export wrappers, and app-shell smoke workflows.
+The repository contains Vitest tests for domain data functions, templates, export planning, export raster rendering, PNG encoding, provider parsing, canvas export wrappers, and app-shell smoke workflows.
 
 Known project commands from `package.json`:
 
@@ -82,13 +82,13 @@ Known project commands from `package.json`:
 - `npm run lint`
 - `npm run typecheck`
 
-Latest verified run on 2026-07-18: `npm run build`, `npm test -- --run`, `npm run lint`, and `npm run typecheck` passed after the full audit pass. The non-live Vitest suite currently has 10 test files and 219 tests. Browser inspection before this audit verified the Hero demo editor rendered with the dark graphite chrome, blue selection states, styled scrollbars, and intact canvas/timeline/preview layout. Live local `qwen3:14b` quality probes remain available through `npm run test:ollama`.
+Latest verified run on 2026-07-18: `npm run build`, `npm test -- --run`, `npm run lint`, and `npm run typecheck` passed after the full todo-list pass: PNG encoder/golden coverage, broader starter recipes, creative tool/timeline/inspector polish, accepted-draft review summaries, layer group labels, and fixed shortcut cleanup. The non-live Vitest suite currently has 11 test files and 226 tests. Browser inspection before this audit verified the Hero demo editor rendered with the dark graphite chrome, blue selection states, styled scrollbars, and intact canvas/timeline/preview layout. Live local `qwen3:14b` quality probes remain available through `npm run test:ollama`.
 
 ## Current Risks And Uncertainty
 
 - `git status --short` on 2026-07-01 reported the repository contents as untracked. Treat the whole tree as intentional work in progress unless the human says otherwise.
 - `docs/STATE_OF_SPRITEWRITE.md` is detailed and useful, but future agents should verify it against source before relying on every implementation claim.
-- Real browser-level download/export flows and binary PNG checks are still listed as incomplete, but jsdom coverage now exercises Project JSON import, Project JSON export UI behavior, full sprite sheet metadata export UI behavior, current-frame PNG export UI behavior, current-animation strip PNG export UI behavior, full sprite sheet PNG export UI behavior, and browser download helpers.
+- Real browser-level download/export flows are still partially unresolved: the in-app browser can verify Project JSON export state, but it still does not expose blob download events and did not surface PNG export status through the automation backend during the 2026-07-18 audit. Non-browser coverage now exercises Project JSON import/export UI behavior, full sprite sheet metadata export UI behavior, current-frame/current-animation/full-sheet PNG export UI behavior, browser download helpers, deterministic PNG encoder golden bytes, and PNG binary smoke checks.
 - In-app browser smoke on 2026-07-04 verified the start screen, generic New Project flow, editor load, 32x32 grid cell count, and visible export controls through the local Vite dev server. Browser automation did not observe blob-anchor download events, so real download-event coverage remains unresolved.
 - Ollama integration is experimental and must fail gracefully. It can list local models, pull/download a named model through local Ollama, ask the selected model for structured selected-frame patch JSON or a larger single-frame draft, request first-pass structured animation drafts, and use recipe-shaped provider calls for some common frame-set requests. SpriteWrite should keep padding plain user prompts into constrained provider requests so users do not have to talk in Ollama contract language. The selected-frame parser accepts common wrappers such as `patch`, `operations`, `ops`, `patchOperations`, `patch_operations`, and a single operation object; wrong JSON shapes surface actionable errors. Do not center product work on provider cleverness, and do not let Ollama return opaque raster output.
 - AI Assist should remain visibly optional in the UX; the primary product path is draw static or animated grid assets, preview them, export current-frame PNGs, current-animation strip PNGs, full sprite sheet PNGs plus metadata, and save editable Project JSON.
@@ -106,13 +106,13 @@ The export direction is "visible and exportable layers render to PNG." If older 
 
 Use `docs/STATE_OF_SPRITEWRITE.md` as the detailed active roadmap. Current next-step themes include:
 
-1. Continue polishing the canvas-first creative workflow: improve icon/tool affordances, refine timeline controls, and keep AI/export from crowding normal drawing.
+1. Continue polishing the canvas-first creative workflow: drawing-tool affordances, timeline labels, frame-inspector grouping, and accepted-draft review summaries now have first-pass coverage; keep AI/export from crowding normal drawing.
 2. Shape AI assistance around focused asset operations: improve prompt-intent padding, first-frame draft, derived frame, in-between, pose change with identity/palette preservation, follow-through, variants, silhouette cleanup, palette suggestions, animation structure, selected-cell/layer patches, and continuity evaluation.
-3. Expand static asset and tile/wall/floor/background generation beyond one-frame prompt context: multiple static variants, tile-set rows, edge/corner/interior tiles, and view-aware recipe rails need product design and validation.
-4. Make recipe-based Ollama drafts more inspectable in the UI before acceptance; current recipe expansion commits accepted animation drafts through validation, but recipe choice, retry strategy, partial row acceptance, and recipe/debug visibility need product design.
-5. Real browser/export download checks or PNG binary smoke tests.
-6. Layer improvements such as folders.
-7. Revisit keyboard shortcut customization only if the workflow clearly needs it; the previous bottom-left shortcut settings panel was removed because it added clutter without helping sprite creation.
+3. Expand static asset and tile/wall/floor/background generation beyond first starter recipes: edge/corner/interior tile sets, more prop/background/effect variants, and view-aware recipe rails need product design and validation.
+4. Make recipe-based Ollama drafts more inspectable before commit: current accepted drafts have compact review summaries, but preview-before-commit, recipe choice, retry strategy, partial row acceptance, and recipe/debug visibility still need product design.
+5. Real browser/export download checks remain needed where the automation backend can observe blob downloads; PNG golden regression coverage now exists for the encoder.
+6. Layer improvements beyond folder labels, such as deeper grouping/bulk controls, remain future work.
+7. Keyboard shortcut customization remains intentionally absent; fixed visible P/E shortcuts now ignore stale legacy saved mappings so the UI hints and actual keys stay aligned.
 
 ## Open Questions
 
