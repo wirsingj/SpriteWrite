@@ -17,7 +17,7 @@ The source of truth in SpriteWrite is not a PNG. It is explicit sprite data: can
 - It is not an AI image generator.
 - It does not ask a model to regenerate a sprite sheet as an opaque raster image.
 - It is not an OozeTactics-specific or Godot-specific utility. OozeTactics is a proving ground, not the product boundary.
-- It does not depend on cloud APIs, auth, a database, a backend, Cuddler, or OllamaSaddle.
+- It does not depend on cloud APIs, auth, a database, Cuddler, or OllamaSaddle. Its only server-side piece is a localhost automation API for local tools.
 - It does not hide sprite state in magic blobs.
 
 ## Why It Exists
@@ -41,7 +41,7 @@ SpriteWrite should support multiple pixel-art resolutions and visual styles. Avo
 
 ## Current MVP Features
 
-- Vite, React, TypeScript, plain CSS.
+- Vite, React, TypeScript, plain CSS, plus a local Node automation API.
 - Hero 32x32 sprite sheet demo with Idle, Jump, Crouch, and Sword Stab rows.
 - Minimal 32x32 ooze reference template kept as a tiny comparison asset.
 - Neutral blank-project palette for non-ooze assets, with slime colors limited to the ooze reference template.
@@ -60,7 +60,7 @@ SpriteWrite should support multiple pixel-art resolutions and visual styles. Avo
 - Center workspace toggle for detailed frame editing or full sprite sheet view; clicking a frame in the full-sheet view returns to editing.
 - Focused AI Assist surface for Ollama structured edit proposals against editable grid data, with startup local Ollama model refresh plus manual refresh/download controls.
 - AI Assist output/view context controls for static frame or tile prompts, animated rows, side-scroller side view, top-down view, and 2.5D/three-quarter view.
-- First-pass Ollama animation-draft flow for broad prompts such as "hero wearing a cape, standing animation"; successful drafts become editable frame rows rather than opaque images.
+- First-pass Ollama animation-draft flow for broad prompts such as "hero wearing a cape, standing animation"; successful drafts stage editable frame rows for explicit apply/reject rather than producing opaque images.
 - Animation preview with adjustable FPS, optional solid preview background color, and crisp nearest-neighbor rendering.
 - Basic previous-frame onion skin.
 - Palette editing for adding colors, reordering colors, editing selected-color name/hex, and deleting unused colors.
@@ -71,7 +71,8 @@ SpriteWrite should support multiple pixel-art resolutions and visual styles. Avo
 - Export project JSON.
 - Import project JSON with strong validation before replacing the current project.
 - Home/start screen with New Project, templates, import, and current project entry.
-- Templates for blank 32x32, blank 64x64, icon 32x32, UI button 64x24, hero 32x32 sprite sheet demo, and ooze 32x32 reference.
+- Templates for blank 32x32, blank 64x64, icon 32x32, UI button 64x24, coin spin, grass tile variants, 3x3 terrain edge/corner/interior tileset, wall/floor tile strip, prop crate, background band, mountain background, effect burst, hero 32x32 sprite sheet demo, and ooze 32x32 reference.
+- Local automation API for other Codex/game-development tasks, including an ooze melee attack endpoint that writes editable Project JSON, metadata JSON, and a full-sheet PNG.
 - Project identity with asset type and optional description.
 - Export current frame PNG.
 - Export current animation as a horizontal animation strip PNG.
@@ -115,10 +116,11 @@ The non-negotiable rule: project data is canon. Canvas rendering and PNG export 
 - Vite
 - React
 - TypeScript
+- Node localhost automation API
 - Plain CSS
 - Vitest
 
-No backend, database, auth, cloud sync, paid provider APIs, or external UI framework.
+No database, auth, cloud sync, paid provider APIs, or external UI framework.
 
 ## Run Locally
 
@@ -127,7 +129,12 @@ npm install
 npm run dev
 ```
 
-Then open the local URL printed by Vite.
+Then open the local URL printed by Vite. `npm run dev` starts both the Vite UI and the SpriteWrite automation API:
+
+```text
+UI:  http://127.0.0.1:5173
+API: http://127.0.0.1:5174
+```
 
 If you're in Git Bash and want a simple, repeatable startup command:
 
@@ -173,8 +180,11 @@ In Git Bash, use:
 ```
 
 If no port is provided, `Run SpriteWrite.bat` uses the default `5173` (or `SPRITEWRITE_PORT` when set).
+ 
+If `SPRITEWRITE_API_PORT` is not set, the launcher uses UI port + 1 for the API (for example, UI 5178 -> API 5179).
+If the API port equals the UI port, the launcher automatically moves the API to the next available port.
 
-On Windows, you can also double-click `Run SpriteWrite.bat` from the repo root. It opens the chosen port in your browser, starts Vite on that port, and stays attached to this terminal. Leave the terminal window open while using the app, and press `Ctrl+C` in that window to stop it.
+On Windows, you can also double-click `Run SpriteWrite.bat` from the repo root. It opens the chosen port in your browser, starts the UI plus local automation API, and stays attached to this terminal. Leave the terminal window open while using the app, and press `Ctrl+C` in that window to stop it.
 
 If you prefer to skip the terminal window, use:
 
@@ -182,7 +192,7 @@ If you prefer to skip the terminal window, use:
 Run SpriteWrite detached.bat 5173
 ```
 
-This launches Vite in the background and writes logs to `spritewrite-dev.log`.
+This launches SpriteWrite in the background and writes logs to `spritewrite-dev.log`.
 It does not auto-open a browser window.
 
 If the app starts acting up, use this cleanup command before restarting:
@@ -200,10 +210,36 @@ Stop SpriteWrite.bat 5173
 If you are in Git Bash and don't want env vars, you can also run:
 
 ```bash
-npm run dev -- --host 127.0.0.1 --port 5178 --strictPort
+npm run dev -- --host 127.0.0.1 --port 5178 --api-port 5179 --strictPort
 ```
 
 Optional desktop shortcut: right-click `Run SpriteWrite.bat`, choose `Show more options`, then `Send to > Desktop (create shortcut)`. This is optional and local to your machine; the repo does not require or create a desktop shortcut.
+
+## Local Automation API
+
+The API binds to `127.0.0.1` and defaults to port `5174`. Other local Codex tasks can call it with ordinary HTTP requests.
+
+Health check:
+
+```bash
+curl http://127.0.0.1:5174/health
+```
+
+Generate ooze melee attack assets:
+
+```bash
+curl -X POST http://127.0.0.1:5174/recipes/ooze-melee-attack \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Ooze Melee Attack","outputDir":"C:/path/to/game/assets/ooze-melee","scale":2}'
+```
+
+The response includes absolute paths for:
+
+- editable `.spritewrite.json`
+- full-sheet `.png`
+- matching `.metadata.json`
+
+A game-making Codex task can use that endpoint as: "call SpriteWrite at `http://127.0.0.1:5174/recipes/ooze-melee-attack`, write the files into my game's asset folder, then wire the PNG and metadata into the game."
 
 ## Test
 
@@ -251,7 +287,7 @@ Use the export menu in the editor header or the command palette:
 
 PNG exports are generated from SpriteWrite grid data through a tested RGBA buffer, then copied into browser canvas/ImageData for PNG encoding. The canvas is an export target, not the source of truth. Exports use transparent RGBA output, no smoothing, no grid lines, no checkerboard, no onion skin, and no selection or patch-preview overlays. A layer must be both visible and marked for PNG export to appear in exported PNGs. Normal, multiply, and screen blend modes are applied during raster export.
 
-Full sprite sheet metadata JSON is intentionally boring for engine importers. It includes the image filename, sheet dimensions, frame/cell dimensions, row/column counts, animation ordering, row indices, frame columns, explicit frame rectangles, FPS, loop behavior, duration, anchor, tags, hitbox data when present, and a `grid` block with origin, cell size, margin, and spacing. It also includes `importHints` for straight alpha, transparent background, no premultiplied alpha, no smoothing, pixel rectangle units, and top-left rectangle basis. Generic importers should be able to slice by the grid or read the explicit `frames[]` rectangles; Godot and Unity profiles can build on that later.
+Animation-strip and full sprite sheet metadata JSON are intentionally boring for engine importers. They include sheet dimensions, frame/cell dimensions, row/column counts, animation ordering, explicit frame rectangles, FPS, loop behavior, duration, anchor, tags, hitbox data when present, a `grid` block with origin, cell size, margin, and spacing, `importHints` for straight alpha and no smoothing, and a generic `importProfile`. Strips use `grid-animation-strip` with one clip; full sheets use `grid-animation-rows` with one clip per animation row. Generic importers should be able to use the profile, slice by the grid, or read the explicit `frames[]` rectangles; Godot and Unity profiles can build on that later.
 
 SpriteWrite uses `Sprite Sheet` for the fixed row-and-column output. `Packed Atlas` is reserved for a future arbitrary rectangle-packing export.
 
@@ -361,3 +397,8 @@ Do not implement these until the core editor earns it:
 - Broader asset recipes for characters, creatures, tiles, props, backgrounds, effects, and UI assets.
 - Cuddler integration.
 - OllamaSaddle provider bridge.
+
+
+
+
+

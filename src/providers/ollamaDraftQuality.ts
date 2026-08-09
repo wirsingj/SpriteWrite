@@ -190,6 +190,11 @@ export function evaluateAnimationDraft(
   })
 
   errors.push(...getIntentQualityErrors(draft, frameStats, paletteMerge.project, context.userInstruction))
+  errors.push(
+    ...getFrameContinuityErrors(frameStats, context.project.canvas.width, context.project.canvas.height, {
+      allowDistributed: context.allowDistributed,
+    }),
+  )
 
   return Array.from(new Set(errors))
 }
@@ -354,6 +359,48 @@ function getIntentQualityErrors(
         errors.push(`Grass frame ${index + 1} should cover enough horizontal tile width to read as grass.`)
       }
     })
+  }
+
+  return errors
+}
+
+function getFrameContinuityErrors(
+  frameStats: FrameStats[],
+  canvasWidth: number,
+  canvasHeight: number,
+  options: { allowDistributed?: boolean } = {},
+): string[] {
+  if (options.allowDistributed) {
+    return []
+  }
+
+  const nonEmptyStats = frameStats.filter((stats) => stats.setCount > 0)
+  if (nonEmptyStats.length < 2) {
+    return []
+  }
+
+  const errors: string[] = []
+  const maxCenterShift = Math.max(3, Math.round(Math.min(canvasWidth, canvasHeight) * 0.22))
+  const maxSizeShift = Math.max(4, Math.round(Math.min(canvasWidth, canvasHeight) * 0.3))
+
+  for (let index = 1; index < nonEmptyStats.length; index += 1) {
+    const previous = nonEmptyStats[index - 1]
+    const current = nonEmptyStats[index]
+    const centerShift = Math.hypot(current.centerX - previous.centerX, current.centerY - previous.centerY)
+    const widthShift = Math.abs(current.width - previous.width)
+    const heightShift = Math.abs(current.height - previous.height)
+
+    if (centerShift > maxCenterShift) {
+      errors.push(
+        `Frame ${index + 1} jumps too far from the previous frame; keep animation motion continuous.`,
+      )
+    }
+
+    if (widthShift > maxSizeShift || heightShift > maxSizeShift) {
+      errors.push(
+        `Frame ${index + 1} changes silhouette bounds too abruptly; preserve scale across neighboring frames.`,
+      )
+    }
   }
 
   return errors

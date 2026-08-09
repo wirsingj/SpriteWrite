@@ -27,6 +27,8 @@ Run the dev server:
 npm run dev
 ```
 
+This starts the Vite UI on the requested SpriteWrite port and the localhost automation API by default on `SPRITEWRITE_API_PORT`, or on UI port + 1 when `SPRITEWRITE_API_PORT` is not set. By default that is `5174` when UI is `5173`.
+
 Windows convenience launcher:
 
 ```text
@@ -51,7 +53,7 @@ You can pass a port positionally:
 npm run dev:bash -- 5188
 ```
 
-The launcher starts the local Vite dev server.
+The launcher starts the local Vite dev server and SpriteWrite automation API.
 The launcher accepts an optional port argument:
 
 ```text
@@ -90,6 +92,8 @@ npm run typecheck
 The package scripts are:
 
 - `npm run dev`
+- `npm run dev:vite`
+- `npm run api`
 - `npm run dev:bash` (Bash-first launch script)
 - `npm run build`
 - `npm run typecheck`
@@ -178,7 +182,8 @@ Use this flow for reliable startup recovery:
 
 - Keep app changes narrow and tested.
 - Preserve the doctrine that project data is canon.
-- Do not add backend/database/auth/cloud sync/packaging unless explicitly requested.
+- Do not add database/auth/cloud sync/packaging unless explicitly requested. Keep the local automation API bound to localhost.
 - Do not add real Cuddler or OllamaSaddle dependencies.
 - Do not store secrets or personal sensitive data in YAIML files.
 - Update YAIML when the durable understanding changes, not for every small implementation detail.
+

@@ -32,15 +32,15 @@ describe('App shell', () => {
       root.render(<App />)
     })
 
+    const quickTemplates = Array.from(container.querySelectorAll('.quick-template-list button')).map((button) =>
+      button.textContent?.trim(),
+    )
+
     expect(container.textContent).toContain('SpriteWrite')
     expect(container.textContent).toContain('Draw static or animated pixel assets')
-    expect(container.textContent).toContain('Blank 64x64')
-    expect(container.textContent).toContain('Grass Tile Variants 32x32')
-    expect(container.textContent).toContain('Prop Crate 32x32')
-    expect(container.textContent).toContain('Background Band 64x32')
-    expect(container.textContent).toContain('Effect Burst 32x32')
-    expect(container.textContent).toContain('Hero 32x32 Sprite Sheet Demo')
-    expect(container.textContent).toContain('Ooze 32x32 Demo')
+    expect(quickTemplates).toEqual(['Background', 'Coin', 'Hero', 'Grass', 'Button', 'Mountain'])
+    expect(container.querySelectorAll('.quick-template-list button')).toHaveLength(6)
+    expect(getSelectByLabel('Template').querySelector('option[value="terrain-tileset-32"]')).toBeTruthy()
   })
 
   it('creates a blank 64x64 project and enters the editor', () => {
@@ -48,7 +48,7 @@ describe('App shell', () => {
       root.render(<App />)
     })
 
-    clickButton('Blank 64x64')
+    setSelectValue(getSelectByLabel('Template'), 'blank-64')
     clickButton('New Project')
 
     expect(container.textContent).toContain('64x64 cells')
@@ -310,6 +310,33 @@ describe('App shell', () => {
     expect(fetch).toHaveBeenCalledWith('http://localhost:11434/api/tags')
   })
 
+  it('keeps custom Ollama model text after refresh when it only differs by spacing', async () => {
+    const fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        models: [
+          { name: 'QWEN3:14B' },
+          { name: 'llava:7b' },
+        ],
+      }),
+    })
+    vi.stubGlobal('fetch', fetch)
+
+    act(() => {
+      root.render(<App />)
+    })
+
+    clickButton('New Project')
+    setSelectValue(getRequiredElement('.atlas-request-panel select') as HTMLSelectElement, 'ollama')
+    const settingsInputs = getRequiredElement('.atlas-request-panel .ollama-settings').querySelectorAll('input')
+    setInputValue(settingsInputs[1], '  qwen3:14B ')
+
+    await clickButtonAsync('Refresh Models')
+
+    expect(settingsInputs[1].value).toBe('qwen3:14B')
+    expect(container.textContent).toContain('Found 2 local Ollama models')
+  })
+
   it('warns when a vision-oriented Ollama model is selected for structured edits', () => {
     act(() => {
       root.render(<App />)
@@ -456,10 +483,24 @@ describe('App shell', () => {
     expect(review.textContent).toContain('4')
     expect(review.textContent).toContain('Patch ops')
     expect(review.textContent).toContain('Hero Idle 1 - 14 operations')
+    expect(container.textContent).toContain('Apply Draft')
+    const beforeApply = setupDownloadCapture()
+    clickButton('Export Project JSON')
+    const unchangedProject = JSON.parse((await beforeApply.capturedBlob.current?.text()) ?? '{}') as {
+      animations: Array<{ id: string; name: string; frameIds: string[] }>
+    }
+    expect(unchangedProject.animations.find((animation) => animation.id === 'idle')).toMatchObject({
+      name: 'Idle',
+      frameIds: ['idle-001'],
+    })
     expect(fetch).toHaveBeenCalledWith(
       'http://localhost:11434/api/generate',
       expect.objectContaining({ method: 'POST' }),
     )
+    vi.restoreAllMocks()
+
+    clickButton('Apply Draft')
+    expect(container.textContent).toContain('Ollama applied 4 editable frames to "Hero Idle".')
 
     const { capturedBlob } = setupDownloadCapture()
     clickButton('Export Project JSON')
@@ -474,6 +515,61 @@ describe('App shell', () => {
     expect(idleFrames).toHaveLength(4)
     expect(idleFrames.every((frame) => Object.keys(frame.layers[0].cells).length >= 8)).toBe(true)
     expect(idleFrames.every((frame) => frame.tags?.includes('ollama-draft'))).toBe(true)
+  })
+
+  it('rejects staged Ollama animation drafts without mutating project data', async () => {
+    const makePatch = (offsetX: number) => [
+      { op: 'set' as const, x: 14 + offsetX, y: 12, colorId: 'ink' },
+      { op: 'set' as const, x: 15 + offsetX, y: 12, colorId: 'ink' },
+      { op: 'set' as const, x: 16 + offsetX, y: 12, colorId: 'ink' },
+      { op: 'set' as const, x: 13 + offsetX, y: 13, colorId: 'accent' },
+      { op: 'set' as const, x: 14 + offsetX, y: 13, colorId: 'accent' },
+      { op: 'set' as const, x: 15 + offsetX, y: 13, colorId: 'accent' },
+      { op: 'set' as const, x: 16 + offsetX, y: 13, colorId: 'accent' },
+      { op: 'set' as const, x: 17 + offsetX, y: 13, colorId: 'accent' },
+      { op: 'set' as const, x: 14 + offsetX, y: 14, colorId: 'ink' },
+      { op: 'set' as const, x: 16 + offsetX, y: 14, colorId: 'ink' },
+    ]
+    const draft = {
+      animationName: 'Rejected Idle',
+      fps: 4,
+      frames: [0, 1, 0, -1].map((offset, index) => ({
+        name: `Rejected Idle ${index + 1}`,
+        durationMs: 250,
+        patch: makePatch(offset),
+      })),
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ response: JSON.stringify(draft) }),
+      } as Response),
+    )
+
+    act(() => {
+      root.render(<App />)
+    })
+
+    clickButton('New Project')
+    const beforeDraft = setupDownloadCapture()
+    clickButton('Export Project JSON')
+    const beforeJson = await beforeDraft.capturedBlob.current?.text()
+
+    const requestInput = getRequiredElement('.atlas-request-panel textarea') as HTMLTextAreaElement
+    setTextAreaValue(requestInput, 'Hero idle animation')
+    await clickButtonAsync('Ask Ollama')
+
+    expect(container.textContent).toContain('Ollama drafted 4 editable frames for "Rejected Idle".')
+    clickButton('Reject Draft')
+    expect(container.textContent).toContain('Ollama draft rejected. No project data changed.')
+    expect(container.textContent).not.toContain('Apply Draft')
+    expect(container.querySelector('.provider-review')).toBeNull()
+    vi.restoreAllMocks()
+
+    const afterReject = setupDownloadCapture()
+    clickButton('Export Project JSON')
+    expect(await afterReject.capturedBlob.current?.text()).toBe(beforeJson)
   })
 
   it('pads plain animation prompts before asking Ollama for draft frames', async () => {
@@ -533,6 +629,10 @@ describe('App shell', () => {
     expect(requestBody.prompt).toContain('SpriteWrite interpretation: Draft a 6-frame editable animation row')
     expect(requestBody.prompt).toContain('For spinning or rotating assets')
     expect(container.textContent).toContain('Ollama drafted 6 editable frames for "Coin Spin".')
+    const paletteReview = getRequiredElement('.provider-palette-review')
+    expect(paletteReview.textContent).toContain('Coin Gold')
+    expect(paletteReview.textContent).toContain('coin_gold #d99a1e')
+    clickButton('Apply Draft')
 
     const { capturedBlob } = setupDownloadCapture()
     clickButton('Export Project JSON')
@@ -593,7 +693,6 @@ describe('App shell', () => {
     await clickButtonAsync('Ask Ollama')
 
     expect(container.textContent).toContain('Ollama drafted 4 animation rows with 12 editable frames.')
-    expect(container.textContent).toContain('Full Sprite Sheet View')
     const review = getRequiredElement('.provider-review')
     expect(review.textContent).toContain('Draft review: animation set')
     expect(review.textContent).toContain('Rows')
@@ -601,6 +700,8 @@ describe('App shell', () => {
     expect(review.textContent).toContain('Frames')
     expect(review.textContent).toContain('12')
     expect(review.textContent).toContain('Grass A - 3 frames')
+    clickButton('Apply Draft')
+    expect(container.textContent).toContain('Full Sprite Sheet View')
 
     const { capturedBlob } = setupDownloadCapture()
     clickButton('Export Project JSON')
@@ -615,6 +716,108 @@ describe('App shell', () => {
       'Grass D',
     ])
     expect(grassAnimations.every((animation) => animation.frameIds.length === 3)).toBe(true)
+  })
+
+  it('adds later Ollama asset drafts as new rows instead of replacing existing generated rows', async () => {
+    const makeCoinPatch = (frameIndex: number) => {
+      const widths = [8, 4, 8, 3, 6, 3]
+      const width = widths[frameIndex % widths.length]
+      const left = Math.floor(16 - width / 2)
+      const patch = []
+      for (let y = 11; y <= 20; y += 1) {
+        for (let x = left; x < left + width; x += 1) {
+          const edge = x === left || x === left + width - 1 || y === 11 || y === 20
+          patch.push({
+            op: 'set' as const,
+            x,
+            y,
+            colorId: edge ? 'ink' : y > 17 ? 'coin_shadow' : 'coin_gold',
+          })
+        }
+      }
+      return patch
+    }
+    const coinDraft = {
+      animationName: 'Coin Spin',
+      fps: 8,
+      paletteAdditions: [
+        { id: 'coin_shadow', name: 'Coin Shadow', hex: '#8f5a14' },
+        { id: 'coin_gold', name: 'Coin Gold', hex: '#d99a1e' },
+      ],
+      frames: Array.from({ length: 6 }, (_, index) => ({
+        name: `Coin Spin ${index + 1}`,
+        durationMs: 125,
+        patch: makeCoinPatch(index),
+      })),
+    }
+    const grassRecipe = {
+      recipe: 'grass_wave_tiles',
+      fps: 4,
+      variations: ['A', 'B', 'C', 'D'].map((label, index) => ({
+        animationName: `Grass ${label}`,
+        frames: [
+          {
+            name: `Grass ${label} 001`,
+            wind: index % 2 ? 1 : -1,
+            blades: [
+              { x: 0, baseY: 31, height: 4 + (index % 2), lean: -1 },
+              { x: 6, baseY: 30, height: 5, lean: 0 },
+              { x: 13, baseY: 31, height: 3 + (index % 3), lean: 1 },
+              { x: 20, baseY: 29, height: 6, lean: -1 },
+              { x: 27, baseY: 31, height: 4, lean: 0 },
+              { x: 31, baseY: 30, height: 5, lean: 1 },
+            ],
+          },
+        ],
+      })),
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ response: JSON.stringify(coinDraft) }),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ response: JSON.stringify(grassRecipe) }),
+        } as Response),
+    )
+
+    act(() => {
+      root.render(<App />)
+    })
+
+    clickButton('New Project')
+    const requestInput = getRequiredElement('.atlas-request-panel textarea') as HTMLTextAreaElement
+    setTextAreaValue(requestInput, 'a 4-6 frame gold coin spinning animation')
+    await clickButtonAsync('Ask Ollama')
+    clickButton('Apply Draft')
+
+    setTextAreaValue(
+      requestInput,
+      'short grass waving in the wind, 3 frames, 4 frame set variations that can tile',
+    )
+    await clickButtonAsync('Ask Ollama')
+    clickButton('Apply Draft')
+    vi.restoreAllMocks()
+
+    const { capturedBlob } = setupDownloadCapture()
+    clickButton('Export Project JSON')
+    const exported = JSON.parse((await capturedBlob.current?.text()) ?? '{}') as {
+      animations: Array<{ name: string; frameIds: string[] }>
+    }
+
+    expect(exported.animations.map((animation) => animation.name)).toEqual([
+      'Coin Spin',
+      'Grass A',
+      'Grass B',
+      'Grass C',
+      'Grass D',
+    ])
+    expect(exported.animations.find((animation) => animation.name === 'Coin Spin')?.frameIds).toHaveLength(6)
+    expect(exported.animations.filter((animation) => animation.name.startsWith('Grass '))).toHaveLength(4)
   })
 
   it('applies Ollama tentacle variation recipes as connected editable animation rows', async () => {
@@ -674,6 +877,7 @@ describe('App shell', () => {
     await clickButtonAsync('Ask Ollama')
 
     expect(container.textContent).toContain('Ollama drafted 3 animation rows with 12 editable frames.')
+    clickButton('Apply Draft')
     expect(container.textContent).toContain('Full Sprite Sheet View')
 
     const { capturedBlob } = setupDownloadCapture()
@@ -828,7 +1032,7 @@ describe('App shell', () => {
     clickButton('New Project')
     paintCellByTitle('0,0')
     clickButton('Home')
-    clickButton('Blank 64x64')
+    setSelectValue(getSelectByLabel('Template'), 'blank-64')
 
     vi.spyOn(window, 'confirm').mockReturnValue(false)
     clickButton('New Project')
@@ -844,7 +1048,7 @@ describe('App shell', () => {
       root.render(<App />)
     })
 
-    clickButton('Blank 64x64')
+    setSelectValue(getSelectByLabel('Template'), 'blank-64')
     clickButton('New Project')
 
     act(() => {
@@ -1840,7 +2044,7 @@ describe('App shell', () => {
       root.render(<App />)
     })
 
-    clickButton('Blank 64x64')
+    setSelectValue(getSelectByLabel('Template'), 'blank-64')
     clickButton('New Project')
 
     await importProjectFile(new File(['{"name":"Broken"}'], 'broken.spritewrite.json', {

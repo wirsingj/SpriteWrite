@@ -815,29 +815,43 @@ export async function listOllamaModels(baseUrl: string): Promise<OllamaModelInfo
     }>
   }
 
-  return (payload.models ?? [])
-    .filter((model) => typeof model.name === 'string' && model.name.trim() !== '')
-    .map((model) => {
-      const family = model.details?.family
-      const families = model.details?.families?.filter((item): item is string => typeof item === 'string') ?? []
-      const derivedCapabilities = new Set(model.capabilities ?? [])
-      if (families.includes('clip')) {
-        derivedCapabilities.add('vision')
-      }
-      if (family) {
-        derivedCapabilities.add('completion')
-      }
+  const normalizedModels: OllamaModelInfo[] = []
+  const seenNames = new Set<string>()
 
-      return {
-        name: model.name.trim(),
-        modifiedAt: model.modified_at,
-        size: model.size,
-        capabilities: Array.from(derivedCapabilities),
-        family,
-        families,
-        parameterSize: model.details?.parameter_size,
-      }
+  for (const model of payload.models ?? []) {
+    if (typeof model.name !== 'string') {
+      continue
+    }
+
+    const name = model.name.trim()
+    const normalizedName = name.toLowerCase()
+    if (!name || seenNames.has(normalizedName)) {
+      continue
+    }
+
+    const family = model.details?.family
+    const families = model.details?.families?.filter((item): item is string => typeof item === 'string') ?? []
+    const derivedCapabilities = new Set(model.capabilities ?? [])
+    if (families.includes('clip')) {
+      derivedCapabilities.add('vision')
+    }
+    if (family) {
+      derivedCapabilities.add('completion')
+    }
+
+    normalizedModels.push({
+      name,
+      modifiedAt: model.modified_at,
+      size: model.size,
+      capabilities: Array.from(derivedCapabilities),
+      family,
+      families,
+      parameterSize: model.details?.parameter_size,
     })
+    seenNames.add(normalizedName)
+  }
+
+  return normalizedModels
 }
 
 export async function pullOllamaModel(baseUrl: string, modelName: string): Promise<string> {

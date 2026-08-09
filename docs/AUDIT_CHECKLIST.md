@@ -141,9 +141,14 @@ Use this after each Codex pass. The goal is not ceremony; the goal is to keep Sp
 - [ ] Ollama patch request success is covered with stubbed provider tests.
 - [ ] Ollama patch parser accepts common wrapper aliases and explains wrong JSON object shapes.
 - [ ] Ollama model refresh/download/main-generate flows are covered with stubbed-fetch tests.
+- [ ] Expandable provider details can copy the full details payload.
 - [ ] Broad Ollama character/animation prompts route to structured animation-draft JSON, not selected-frame noise.
 - [ ] Broad Ollama animation drafts create 3-6 editable frames only after validation/coherence checks pass.
-- [ ] Accepted structured Ollama drafts show a compact review summary before raw provider JSON details.
+- [ ] Valid structured Ollama drafts stage a compact review summary and do not mutate project data until Apply Draft.
+- [ ] Reject Draft clears the staged animation draft and leaves exported Project JSON unchanged.
+- [ ] Follow-up broad asset drafts append new rows when the selected row already contains art, unless replacement is explicit.
+- [ ] Staged animation drafts show proposed palette additions as visible swatches before Apply Draft.
+- [ ] Animation-draft quality rejects abrupt neighboring-frame jumps unless the draft is intentionally distributed.
 - [ ] AI assistance remains constrained co-editing: structured patches, frame drafts, palette suggestions, or layer operations, never irreversible raster replacement.
 - [ ] Future AI operations preserve fixed dimensions, palette constraints, frame intent, neighboring-frame context, silhouette/identity constraints, and user preview/accept/reject/undo.
 - [ ] Invalid selected-frame Ollama patches show errors and do not render proposal overlays on the canvas.
@@ -180,6 +185,7 @@ Use this after each Codex pass. The goal is not ceremony; the goal is to keep Sp
 - [ ] Metadata/layout match tests exist.
 - [ ] Full sprite sheet metadata frame regions match PNG layout.
 - [ ] Metadata includes image filename, sheet dimensions, cell size, rows, columns, scale, margin, spacing, animation ordering, row index, frame column, FPS, loop behavior, duration, anchor, tags, and hitbox when present.
+- [ ] Full sprite sheet metadata includes a generic grid-animation-row import profile with slice settings and one clip per animation row.
 - [ ] Canvas PNG export uses the tested RGBA renderer.
 - [ ] PNG blob export uses the tested RGBA renderer and deterministic PNG encoder.
 - [ ] Canvas wrapper tests verify ImageData copy and smoothing disabled.

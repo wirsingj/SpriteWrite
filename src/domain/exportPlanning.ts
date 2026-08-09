@@ -201,6 +201,31 @@ export function createSpriteSheetLayout(
       frameRegionUnit: 'pixels',
       frameRegionBasis: 'top-left',
     },
+    importProfile: {
+      kind: 'grid-animation-strip',
+      description:
+        'Slice the image as a one-row fixed grid, then create one animation clip from the declared frame count.',
+      slice: {
+        originX: resolved.margin,
+        originY: resolved.margin,
+        cellWidth: frameWidth,
+        cellHeight: frameHeight,
+        spacing: resolved.spacing,
+        columns: frameCount,
+        rows: 1,
+      },
+      animationClips: [
+        {
+          animationId: animation.id,
+          animationName: animation.name,
+          rowIndex: 0,
+          startColumn: 0,
+          frameCount,
+          fps: animation.fps,
+          loop: true,
+        },
+      ],
+    },
   }
 }
 
@@ -304,6 +329,29 @@ export function createFullSpriteSheetLayout(
       smoothing: false,
       frameRegionUnit: 'pixels',
       frameRegionBasis: 'top-left',
+    },
+    importProfile: {
+      kind: 'grid-animation-rows',
+      description:
+        'Slice the image as a fixed grid, then create one animation clip per row using the declared frame count.',
+      slice: {
+        originX: resolved.margin,
+        originY: resolved.margin,
+        cellWidth: frameWidth,
+        cellHeight: frameHeight,
+        spacing: resolved.spacing,
+        columns: columnCount,
+        rows: rowCount,
+      },
+      animationClips: animations.map((animation) => ({
+        animationId: animation.animationId,
+        animationName: animation.animationName,
+        rowIndex: animation.rowIndex,
+        startColumn: 0,
+        frameCount: animation.frameCount,
+        fps: animation.fps,
+        loop: true,
+      })),
     },
   }
 }

@@ -3,6 +3,15 @@ import { SPRITE_PROJECT_TEMPLATES } from '../domain/projectTemplates'
 import { ASSET_TYPE_OPTIONS, formatAssetType } from '../domain/assetTypes'
 import { MiniSprite } from './MiniSprite'
 
+const QUICK_TEMPLATE_CHOICES = [
+  { id: 'background-band-64x32', label: 'Background' },
+  { id: 'coin-32', label: 'Coin' },
+  { id: 'hero-32-demo', label: 'Hero' },
+  { id: 'tile-grass-32', label: 'Grass' },
+  { id: 'button-64x24', label: 'Button' },
+  { id: 'mountain-64x32', label: 'Mountain' },
+]
+
 export function StartScreen({
   importErrors,
   heroDemoProject,
@@ -42,6 +51,10 @@ export function StartScreen({
 }) {
   const heroDemoAnimation = heroDemoProject.animations[0]
   const heroDemoFrameId = heroDemoAnimation?.frameIds?.[0]
+  const quickTemplates = QUICK_TEMPLATE_CHOICES.map((choice) => ({
+    ...choice,
+    template: templates.find((template) => template.id === choice.id),
+  })).filter((choice): choice is typeof choice & { template: (typeof templates)[number] } => Boolean(choice.template))
 
   return (
     <section className="start-screen">
@@ -128,19 +141,15 @@ export function StartScreen({
 
         <section className="panel start-panel">
           <h2>New From Template</h2>
-          <div className="template-list">
-            {templates.map((template) => (
+          <div className="template-list quick-template-list">
+            {quickTemplates.map(({ label, template }) => (
               <button
                 key={template.id}
                 type="button"
                 className={newProjectTemplateId === template.id ? 'template-card active' : 'template-card'}
                 onClick={() => onSetTemplate(template.id)}
               >
-                <strong>{template.name}</strong>
-                <span>
-                  {formatAssetType(template.assetType)} / {template.width}x{template.height}
-                </span>
-                <span>{template.description}</span>
+                <strong>{label}</strong>
               </button>
             ))}
           </div>

@@ -17,11 +17,12 @@ agent-guidance: Prefer existing patterns. Keep project data canonical. Do not in
 
 - Vite application.
 - React UI coordinated by `src/App.tsx` with stable editor/start-screen surfaces extracted into `src/components/`.
+- Local Node automation API in `api/server.ts` for localhost clients that need SpriteWrite-generated editable assets and exports.
 - TypeScript domain and provider code.
 - Plain CSS in `src/App.css` and `src/index.css`.
 - Vitest tests colocated near source files.
 
-No backend, database, auth, cloud sync, Electron packaging, or external UI framework is part of the current architecture.
+No database, auth, cloud sync, Electron packaging, or external UI framework is part of the current architecture. The only server-side piece is a localhost Node automation API for local tools and Codex clients.
 
 ## Source Of Truth
 
@@ -48,15 +49,17 @@ The model is engine-neutral. OozeTactics and Godot can consume exported artifact
 - `src/domain/assetTypes.ts`: shared asset-type labels and options for app/template UI.
 - `src/domain/spriteData.ts`: project creation, validation, patch validation/apply, and pure project transformations.
 - `src/domain/projectTemplates.ts`: template definitions for new projects.
+- `src/domain/oozeMeleeRecipe.ts`: first game-automation recipe for editable ooze melee attack assets.
 - `src/domain/rendering.ts`: preview composition from project data.
 - `src/domain/exportPlanning.ts`: deterministic sprite sheet layout and metadata planning.
 - `src/domain/exportRaster.ts`: pure RGBA export rendering.
-- `src/providers/*`: AI patch provider contracts and implementations.
+- `src/providers/*`: AI patch provider contracts and implementations, including model-discovery normalization and de-duplication before exposing installed models in the UI.
 - `src/utils/canvasExport.ts`: browser canvas helpers plus PNG blob export wrappers around the tested RGBA export buffer.
 - `src/utils/pngExport.ts`: small deterministic RGBA-to-PNG encoder used by PNG exports.
 - `src/utils/download.ts`: browser download helpers.
 - `src/components/*`: extracted React UI surfaces such as the start screen, command palette, color picker, atlas timeline, full-sheet workspace, mini sprite thumbnail, and provider-details disclosure.
 - `src/App.tsx`: app orchestration, editor state, project mutations, provider workflow, export actions, browser draft state, and composition of extracted UI components.
+- `api/server.ts`: localhost-only automation bridge for template/project and recipe-generated asset bundles. It writes explicit Project JSON, metadata JSON, and PNG exports from canonical `SpriteProject` data.
 
 ## Data Flow
 
@@ -85,18 +88,20 @@ SpriteWrite, not the user, is responsible for padding natural requests into cons
 Broad animation draft:
 
 ```text
-whole-asset instruction + project context -> provider -> frame patch arrays -> validate/coherence check -> replace selected animation row or reject without mutation
+whole-asset instruction + project context -> provider -> frame patch arrays -> validate/coherence check -> reuse empty selected row or append new row -> stage for apply/reject
 ```
 
 Recipe-based animation draft:
 
 ```text
-whole-asset instruction + project context -> provider -> compact recipe parameters -> deterministic SpriteWrite expansion -> frame patch arrays -> validate/coherence check -> replace selected row and append additional rows or reject without mutation
+whole-asset instruction + project context -> provider -> compact recipe parameters -> deterministic SpriteWrite expansion -> frame patch arrays -> validate/coherence check -> reuse empty selected row or append new rows -> stage for apply/reject
 ```
 
 Recipe expansion is still structured editing. The provider supplies bounded JSON parameters such as grass blades, character idle motion hints, or tentacle creature variation parameters. SpriteWrite derives ordinary `PixelPatchOperation[]` from those parameters and never treats the recipe or any generated canvas as source of truth.
 
 Direct animation drafts may include `paletteAdditions`. SpriteWrite validates and merges those colors before validating frame operations. This lets the provider intuit asset-specific palettes while keeping palette state explicit in `SpriteProject`.
+
+Broad asset drafts are additive once a selected animation row contains art. SpriteWrite may reuse the selected row as a blank starter slot, or replace it when the instruction clearly asks to replace/update the current row, but follow-up asset requests such as creating grass after a coin should append new animation rows instead of overwriting existing generated assets.
 
 Future AI operations should use the same principle: a provider may suggest editable frame grids, palette changes, duplicated-and-modified frames, or explicit layer operations, but the app must validate and present them for user acceptance before mutation.
 
@@ -110,6 +115,12 @@ Project save:
 
 ```text
 SpriteProject -> Project JSON export
+```
+
+Local automation API recipe export:
+
+```text
+game/Codex client -> localhost SpriteWrite API -> SpriteProject recipe -> validation -> PNG/metadata/project files
 ```
 
 ## Invariants

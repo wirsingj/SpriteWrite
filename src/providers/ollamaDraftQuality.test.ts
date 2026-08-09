@@ -105,6 +105,53 @@ describe('Ollama draft quality checks', () => {
     )
   })
 
+  it('rejects animation drafts where neighboring frames jump across the canvas', () => {
+    const project = createIconProject()
+    const makeBlock = (originX: number, originY: number) => {
+      const patch = []
+      for (let y = originY; y < originY + 5; y += 1) {
+        for (let x = originX; x < originX + 5; x += 1) {
+          patch.push({ op: 'set' as const, x, y, colorId: 'accent' })
+        }
+      }
+      return patch
+    }
+    const draft: OllamaAnimationDraft = {
+      animationName: 'Teleporting Blob',
+      fps: 6,
+      frames: [
+        { name: 'Blob 1', durationMs: 160, patch: makeBlock(4, 12) },
+        { name: 'Blob 2', durationMs: 160, patch: makeBlock(24, 12) },
+        { name: 'Blob 3', durationMs: 160, patch: makeBlock(5, 12) },
+      ],
+    }
+
+    const strictErrors = evaluateAnimationDraft(draft, {
+      project,
+      animationId: 'idle',
+      frameId: 'idle-001',
+      layerId: 'base',
+      userInstruction: 'simple creature idle animation. 3 frames.',
+      requestedFrameCount: 3,
+    })
+    const distributedErrors = evaluateAnimationDraft(draft, {
+      project,
+      animationId: 'idle',
+      frameId: 'idle-001',
+      layerId: 'base',
+      userInstruction: 'distributed tile sparkle animation. 3 frames.',
+      requestedFrameCount: 3,
+      allowDistributed: true,
+    })
+
+    expect(strictErrors).toContain(
+      'Frame 2 jumps too far from the previous frame; keep animation motion continuous.',
+    )
+    expect(distributedErrors).not.toContain(
+      'Frame 2 jumps too far from the previous frame; keep animation motion continuous.',
+    )
+  })
+
   it('retries with SpriteWrite quality feedback before failing or accepting', async () => {
     const project = createIconProject()
     const weakDraft: OllamaAnimationDraft = {

@@ -125,6 +125,43 @@ describe('parseOllamaPatchResponse', () => {
     ])
   })
 
+  it('deduplicates and normalizes model names when listing local Ollama models', async () => {
+    const fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        models: [
+          { name: 'qwen3:14b' },
+          { name: 'QWEN3:14b ' },
+          { name: '  qwen3:14b' },
+          { name: '' },
+          { name: 'qwen3:14b:latest' },
+        ],
+      }),
+    } as Response)
+    vi.stubGlobal('fetch', fetch)
+
+    await expect(listOllamaModels('http://localhost:11434')).resolves.toEqual([
+      {
+        name: 'qwen3:14b',
+        modifiedAt: undefined,
+        size: undefined,
+        capabilities: [],
+        family: undefined,
+        families: [],
+        parameterSize: undefined,
+      },
+      {
+        name: 'qwen3:14b:latest',
+        modifiedAt: undefined,
+        size: undefined,
+        capabilities: [],
+        family: undefined,
+        families: [],
+        parameterSize: undefined,
+      },
+    ])
+  })
+
   it('derives vision capability from Ollama model details', async () => {
     const fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -755,3 +792,4 @@ describe('parseOllamaPatchResponse', () => {
     135_000,
   )
 })
+

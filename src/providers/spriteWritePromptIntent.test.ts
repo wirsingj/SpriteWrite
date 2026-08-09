@@ -97,6 +97,20 @@ describe('SpriteWrite prompt intent', () => {
     expect(intent.summary).toContain('4 editable animation variations')
   })
 
+  it('treats numbered animation requests as animation set drafts', () => {
+    const intent = createSpriteWritePromptIntent(
+      '3 animations. A monk jumping, a monk kneeling, and a monk punching.',
+      project,
+    )
+
+    expect(intent.mode).toBe('animation-draft')
+    expect(intent.frameCount).toBe(4)
+    expect(intent.variationCount).toBe(3)
+    expect(intent.summary).toContain('3 editable animation variations')
+    expect(intent.paddedInstruction).toContain('Draft 3 editable animation rows with 4 frames each')
+    expect(intent.paddedInstruction).toContain('Each animation row should represent a distinct requested action')
+  })
+
   it('routes terse creative animation prompts without explicit frame language', () => {
     const heroIntent = createSpriteWritePromptIntent('hero idle', project)
     const tentacleIntent = createSpriteWritePromptIntent('tentacle monster, 3 variations', project)

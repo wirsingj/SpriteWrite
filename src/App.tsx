@@ -104,6 +104,15 @@ type ProviderReview = {
   title: string
   metrics: Array<{ label: string; value: string }>
   rows: string[]
+  paletteAdditions?: PaletteColor[]
+}
+type PendingAnimationDraft = {
+  project: SpriteProject
+  animationId: AnimationId
+  frameId: FrameId
+  atlasFrameIds: FrameId[]
+  workspaceMode: WorkspaceMode
+  appliedMessage: string
 }
 
 const TRANSPARENT_LABEL = 'transparent'
@@ -218,6 +227,10 @@ function normalizeModelName(model: string): string {
   return model.trim()
 }
 
+function normalizeModelValue(model: string): string {
+  return model.trim().toLowerCase()
+}
+
 function tagsEqual(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((tag, index) => tag === right[index])
 }
@@ -263,10 +276,12 @@ function countDraftOperations(draft: OllamaAnimationDraft): number {
 }
 
 function createAnimationDraftReview(
+  project: SpriteProject,
   draft: OllamaAnimationDraft,
   createdFrameIds: FrameId[],
   qualityAttempts: Array<OllamaDraftQualityAttempt<OllamaAnimationDraft>>,
 ): ProviderReview {
+  const paletteAdditions = getReviewPaletteAdditions(project, draft.paletteAdditions)
   return {
     title: `Draft review: ${draft.animationName?.trim() || 'Animation row'}`,
     metrics: [
@@ -280,10 +295,12 @@ function createAnimationDraftReview(
       const name = frame.name?.trim() || createdFrameIds[index] || `Frame ${index + 1}`
       return `${name} - ${frame.patch.length} operation${frame.patch.length === 1 ? '' : 's'}`
     }),
+    paletteAdditions,
   }
 }
 
 function createAnimationSetDraftReview(
+  project: SpriteProject,
   draft: OllamaAnimationSetDraft,
   qualityAttempts: Array<OllamaDraftQualityAttempt<OllamaAnimationSetDraft>>,
 ): ProviderReview {
@@ -295,6 +312,10 @@ function createAnimationSetDraftReview(
   const paletteAdditionCount = draft.animations.reduce(
     (total, animation) => total + (animation.paletteAdditions?.length ?? 0),
     0,
+  )
+  const paletteAdditions = getReviewPaletteAdditions(
+    project,
+    draft.animations.flatMap((animation) => animation.paletteAdditions ?? []),
   )
 
   return {
@@ -313,7 +334,34 @@ function createAnimationSetDraftReview(
         animation.frames.length === 1 ? '' : 's'
       }, ${operations} operation${operations === 1 ? '' : 's'}`
     }),
+    paletteAdditions,
   }
+}
+
+function getReviewPaletteAdditions(project: SpriteProject, additions: PaletteColor[] | undefined): PaletteColor[] {
+  if (!additions?.length) {
+    return []
+  }
+
+  const existingIds = new Set(project.palette.map((color) => color.id))
+  const seenIds = new Set<string>()
+  const reviewAdditions: PaletteColor[] = []
+
+  additions.forEach((color) => {
+    const id = color.id.trim()
+    if (!id || existingIds.has(id) || seenIds.has(id)) {
+      return
+    }
+
+    seenIds.add(id)
+    reviewAdditions.push({
+      id,
+      name: color.name.trim(),
+      hex: color.hex,
+    })
+  })
+
+  return reviewAdditions
 }
 
 function flushProviderMessage(setProviderMessage: (message: string) => void, message: string) {
@@ -506,10 +554,12 @@ function App() {
   const [providerMessage, setProviderMessage] = useState('')
   const [providerDetails, setProviderDetails] = useState('')
   const [providerReview, setProviderReview] = useState<ProviderReview | null>(null)
+  const [pendingAnimationDraft, setPendingAnimationDraft] = useState<PendingAnimationDraft | null>(null)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [ollamaBaseUrl, setOllamaBaseUrl] = useState('http://localhost:11434')
   const [ollamaModel, setOllamaModel] = useState('llama3.2')
   const activeOllamaModel = normalizeModelName(ollamaModel)
+  const normalizedOllamaModel = normalizeModelValue(activeOllamaModel)
   const [ollamaModels, setOllamaModels] = useState<OllamaModelInfo[]>([])
   const [isOllamaBusy, setIsOllamaBusy] = useState(false)
   const [exportScale, setExportScale] = useState(1)
@@ -536,7 +586,9 @@ function App() {
       }),
     [assetOutputContext, instruction, project, viewAngleContext],
   )
-  const selectedInstalledOllamaModel = ollamaModels.some((model) => model.name === activeOllamaModel)
+  const selectedInstalledOllamaModel = ollamaModels.some((model) =>
+    normalizeModelValue(model.name) === normalizeModelValue(activeOllamaModel),
+  )
     ? activeOllamaModel
     : ''
   const importInputRef = useRef<HTMLInputElement | null>(null)
@@ -607,6 +659,7 @@ function App() {
   function clearProviderDiagnostics() {
     setProviderDetails('')
     setProviderReview(null)
+    setPendingAnimationDraft(null)
   }
 
   useEffect(() => {
@@ -742,7 +795,7 @@ function App() {
     listOllamaModels(ollamaBaseUrl)
       .then((models) => {
         setOllamaModels(models)
-        const selectedModel = models.some((model) => model.name === activeOllamaModel)
+        const selectedModel = models.some((model) => normalizeModelValue(model.name) === normalizeModelValue(activeOllamaModel))
           ? activeOllamaModel
           : choosePreferredOllamaModel(models)?.name
         if (selectedModel) {
@@ -894,6 +947,23 @@ function App() {
     }
 
     return candidate
+  }
+
+  function isFrameEmpty(frame: SpriteFrame | undefined): boolean {
+    return !frame || frame.layers.every((layer) => Object.keys(layer.cells).length === 0)
+  }
+
+  function isAnimationEmpty(projectToCheck: SpriteProject, animationId: AnimationId): boolean {
+    const animation = getAnimation(projectToCheck, animationId)
+    return !!animation && animation.frameIds.every((frameId) => isFrameEmpty(getFrame(projectToCheck, frameId)))
+  }
+
+  function shouldReplaceSelectedAnimationForDraft(sourceInstruction: string): boolean {
+    if (isAnimationEmpty(project, selectedAnimation.id)) {
+      return true
+    }
+
+    return /\b(replace|overwrite|redo|remake|update|revise)\b/i.test(sourceInstruction)
   }
 
   function duplicateSelectedAtlasFrames() {
@@ -1216,7 +1286,7 @@ function App() {
     clearProviderDiagnostics()
     setIsOllamaBusy(true)
     try {
-      const provider = new OllamaPatchProvider({ baseUrl: ollamaBaseUrl, model: activeOllamaModel })
+      const provider = new OllamaPatchProvider({ baseUrl: ollamaBaseUrl, model: normalizedOllamaModel })
       const maxOperations =
         spriteWritePromptIntent.mode === 'frame-draft' ? getMaxOllamaDraftOperations(project) : 24
       const patch = await provider.requestPatch({
@@ -1237,7 +1307,7 @@ function App() {
           userInstruction: spriteWritePromptIntent.userInstruction,
           paddedInstruction: spriteWritePromptIntent.paddedInstruction,
           baseUrl: ollamaBaseUrl,
-          model: activeOllamaModel,
+          model: normalizedOllamaModel,
           maxOperations,
           validationErrors: validation.errors,
           patch,
@@ -1265,7 +1335,7 @@ function App() {
           userInstruction: spriteWritePromptIntent.userInstruction,
           paddedInstruction: spriteWritePromptIntent.paddedInstruction,
           baseUrl: ollamaBaseUrl,
-          model: activeOllamaModel,
+          model: normalizedOllamaModel,
           error: formatErrorForDetails(error),
         }),
       )
@@ -1292,7 +1362,7 @@ function App() {
     setIsOllamaBusy(true)
 
     try {
-      const provider = new OllamaPatchProvider({ baseUrl: ollamaBaseUrl, model: activeOllamaModel })
+      const provider = new OllamaPatchProvider({ baseUrl: ollamaBaseUrl, model: normalizedOllamaModel })
       const maxDraftOperations = getMaxOllamaDraftOperations(project)
       if (intent.variationCount > 1) {
         const result = await requestImprovedAnimationSetDraft(
@@ -1356,7 +1426,7 @@ function App() {
           paddedInstruction: intent.paddedInstruction,
           requestedFrameCount: intent.frameCount,
           baseUrl: ollamaBaseUrl,
-          model: activeOllamaModel,
+          model: normalizedOllamaModel,
           error: formatErrorForDetails(error),
         }),
       )
@@ -1446,8 +1516,10 @@ function App() {
     }
 
     const timestamp = Date.now()
-    const oldFrameIds = [...selectedAnimation.frameIds]
+    const replaceSelectedAnimation = shouldReplaceSelectedAnimationForDraft(sourceInstruction)
+    const oldFrameIds = replaceSelectedAnimation ? [...selectedAnimation.frameIds] : []
     const createdFrameIds: FrameId[] = []
+    const createdAnimationIds: AnimationId[] = []
     let nextProject = cloneProject(project)
     const paletteMerge = mergeDraftPaletteAdditions(nextProject, draft.paletteAdditions)
     if (paletteMerge.errors.length) {
@@ -1471,8 +1543,8 @@ function App() {
       return
     }
     nextProject = paletteMerge.project
-    const animation = getAnimation(nextProject, selectedAnimation.id)
-    if (!animation) {
+    const selectedTargetAnimation = getAnimation(nextProject, selectedAnimation.id)
+    if (!selectedTargetAnimation) {
       setProviderMessage(`Cannot draft animation because animation "${selectedAnimation.id}" is missing.`)
       setProviderDetails(
         formatProviderDetails('Ollama animation draft rejected', {
@@ -1486,12 +1558,29 @@ function App() {
       return
     }
 
+    const animation = replaceSelectedAnimation
+      ? selectedTargetAnimation
+      : {
+          id: createUniqueAnimationId(
+            nextProject,
+            slugifyId(draft.animationName ?? 'ollama-draft', 'ollama-draft'),
+          ),
+          name: draft.animationName?.trim() || 'Ollama Draft',
+          fps: draft.fps ?? selectedAnimation.fps,
+          frameIds: [],
+        }
+
+    if (!replaceSelectedAnimation) {
+      nextProject.animations.push(animation)
+    }
+
     animation.name = draft.animationName?.trim() || animation.name
     animation.fps = draft.fps ?? animation.fps
     animation.frameIds = []
+    createdAnimationIds.push(animation.id)
 
     draft.frames.forEach((frameDraft, index) => {
-      const id = createUniqueFrameId(nextProject, `${selectedAnimation.id}-ollama-${timestamp}-${index + 1}`)
+      const id = createUniqueFrameId(nextProject, `${animation.id}-ollama-${timestamp}-${index + 1}`)
       const frame: SpriteFrame = {
         ...structuredClone(selectedFrame),
         id,
@@ -1509,7 +1598,7 @@ function App() {
     const errors: string[] = []
     draft.frames.forEach((frameDraft, index) => {
       const frameId = createdFrameIds[index]
-      const validation = validatePatch(nextProject, selectedAnimation.id, frameId, selectedLayerId, frameDraft.patch)
+      const validation = validatePatch(nextProject, animation.id, frameId, selectedLayerId, frameDraft.patch)
       if (!validation.valid) {
         errors.push(...validation.errors.map((error) => `Frame ${index + 1}: ${error}`))
       }
@@ -1523,7 +1612,7 @@ function App() {
         ),
       )
       if (!errors.length) {
-        nextProject = applyPatch(nextProject, selectedAnimation.id, frameId, selectedLayerId, frameDraft.patch)
+        nextProject = applyPatch(nextProject, animation.id, frameId, selectedLayerId, frameDraft.patch)
       }
     })
 
@@ -1545,7 +1634,7 @@ function App() {
           requestedFrameCount: intent.frameCount,
           receivedFrameCount: draft.frames.length,
           baseUrl: ollamaBaseUrl,
-          model: activeOllamaModel,
+          model: normalizedOllamaModel,
           validationErrors: errors,
           qualityAttempts: formatDraftQualityAttempts(qualityAttempts),
           draft,
@@ -1560,30 +1649,40 @@ function App() {
     )
     nextProject.metadata.updatedAt = new Date().toISOString()
 
-    commitProject(nextProject)
-    setSelectedAnimationId(selectedAnimation.id)
-    setSelectedFrameId(createdFrameIds[0])
-    setSelectedAtlasFrameIds(new Set([createdFrameIds[0]]))
-    setAtlasSelectionAnchorId(createdFrameIds[0])
-    setPreviewIndex(0)
-    setWorkspaceMode('frame')
+    const appliedPlacementMessage = replaceSelectedAnimation ? `to "${animation.name}"` : `as new row "${animation.name}"`
+    const draftPlacementMessage = replaceSelectedAnimation ? `for "${animation.name}"` : `as new row "${animation.name}"`
+    const appliedMessage = `Ollama ${replaceSelectedAnimation ? 'applied' : 'added'} ${
+      createdFrameIds.length
+    } editable frame${
+      createdFrameIds.length === 1 ? '' : 's'
+    } ${appliedPlacementMessage}.`
     setProposedPatch([])
     setProviderMessage(
       `Attempt ${attemptContext.attempt} completed in ${formatElapsedMs(
         attemptContext.startedAt,
       )}. Ollama drafted ${createdFrameIds.length} editable frame${
         createdFrameIds.length === 1 ? '' : 's'
-      } for "${animation.name}".`,
+      } ${draftPlacementMessage}. Review before applying.`,
     )
-    setProviderReview(createAnimationDraftReview(draft, createdFrameIds, qualityAttempts))
+    setPendingAnimationDraft({
+      project: nextProject,
+      animationId: animation.id,
+      frameId: createdFrameIds[0],
+      atlasFrameIds: [createdFrameIds[0]],
+      workspaceMode: 'frame',
+      appliedMessage,
+    })
+    setProviderReview(createAnimationDraftReview(project, draft, createdFrameIds, qualityAttempts))
     setProviderDetails(
-      formatProviderDetails('Ollama animation draft accepted', {
+      formatProviderDetails('Ollama animation draft staged', {
         attempt: attemptContext.attempt,
         elapsedMs: formatElapsedMs(attemptContext.startedAt),
         mode: intent.mode,
         userInstruction: intent.userInstruction,
         paddedInstruction: intent.paddedInstruction,
         requestedFrameCount: intent.frameCount,
+        replacedSelectedAnimation: replaceSelectedAnimation,
+        createdAnimationIds,
         createdFrameIds,
         animationName: animation.name,
         qualityAttempts: formatDraftQualityAttempts(qualityAttempts),
@@ -1631,7 +1730,8 @@ function App() {
     }
 
     const timestamp = Date.now()
-    const oldFrameIds = [...selectedAnimation.frameIds]
+    const replaceSelectedAnimation = shouldReplaceSelectedAnimationForDraft(sourceInstruction)
+    const oldFrameIds = replaceSelectedAnimation ? [...selectedAnimation.frameIds] : []
     let nextProject = cloneProject(project)
     const paletteMerge = mergeDraftPaletteAdditions(
       nextProject,
@@ -1669,15 +1769,16 @@ function App() {
     }> = []
 
     setDraft.animations.forEach((animationDraft, animationIndex) => {
+      const useSelectedAnimation = replaceSelectedAnimation && animationIndex === 0
       const animationId =
-        animationIndex === 0
+        useSelectedAnimation
           ? selectedAnimation.id
           : createUniqueAnimationId(
               nextProject,
               slugifyId(animationDraft.animationName ?? `ollama-draft-${animationIndex + 1}`, 'ollama-draft'),
             )
       const animation =
-        animationIndex === 0
+        useSelectedAnimation
           ? getAnimation(nextProject, selectedAnimation.id)
           : {
               id: animationId,
@@ -1691,7 +1792,7 @@ function App() {
         return
       }
 
-      if (animationIndex > 0) {
+      if (!useSelectedAnimation) {
         nextProject.animations.push(animation)
       }
 
@@ -1764,7 +1865,7 @@ function App() {
           requestedFrameCount: intent.frameCount,
           requestedVariationCount: intent.variationCount,
           baseUrl: ollamaBaseUrl,
-          model: activeOllamaModel,
+          model: normalizedOllamaModel,
           validationErrors: errors,
           qualityAttempts: formatDraftQualityAttempts(qualityAttempts),
           setDraft,
@@ -1783,24 +1884,30 @@ function App() {
     )
     nextProject.metadata.updatedAt = new Date().toISOString()
 
-    commitProject(nextProject)
-    setSelectedAnimationId(createdAnimationIds[0] ?? selectedAnimation.id)
-    setSelectedFrameId(createdFrameIds[0])
-    setSelectedAtlasFrameIds(new Set([createdFrameIds[0]]))
-    setAtlasSelectionAnchorId(createdFrameIds[0])
-    setPreviewIndex(0)
-    setWorkspaceMode('sheet')
+    const appliedMessage = `Ollama applied ${setDraft.animations.length} animation row${
+      setDraft.animations.length === 1 ? '' : 's'
+    } with ${createdFrameIds.length} editable frame${createdFrameIds.length === 1 ? '' : 's'}.`
     setProposedPatch([])
     setProviderMessage(
       `Attempt ${attemptContext.attempt} completed in ${formatElapsedMs(
         attemptContext.startedAt,
       )}. Ollama drafted ${setDraft.animations.length} animation row${
         setDraft.animations.length === 1 ? '' : 's'
-      } with ${createdFrameIds.length} editable frame${createdFrameIds.length === 1 ? '' : 's'}.`,
+      } with ${createdFrameIds.length} editable frame${
+        createdFrameIds.length === 1 ? '' : 's'
+      }. Review before applying.`,
     )
-    setProviderReview(createAnimationSetDraftReview(setDraft, qualityAttempts))
+    setPendingAnimationDraft({
+      project: nextProject,
+      animationId: createdAnimationIds[0] ?? selectedAnimation.id,
+      frameId: createdFrameIds[0],
+      atlasFrameIds: [createdFrameIds[0]],
+      workspaceMode: 'sheet',
+      appliedMessage,
+    })
+    setProviderReview(createAnimationSetDraftReview(project, setDraft, qualityAttempts))
     setProviderDetails(
-      formatProviderDetails('Ollama animation set accepted', {
+      formatProviderDetails('Ollama animation set staged', {
         attempt: attemptContext.attempt,
         elapsedMs: formatElapsedMs(attemptContext.startedAt),
         mode: intent.mode,
@@ -1808,6 +1915,7 @@ function App() {
         paddedInstruction: intent.paddedInstruction,
         requestedFrameCount: intent.frameCount,
         requestedVariationCount: intent.variationCount,
+        replacedSelectedAnimation: replaceSelectedAnimation,
         createdAnimationIds,
         createdFrameIds,
         qualityAttempts: formatDraftQualityAttempts(qualityAttempts),
@@ -1823,9 +1931,11 @@ function App() {
     try {
       const models = await listOllamaModels(ollamaBaseUrl)
       setOllamaModels(models)
-      const selectedModel = models.length && !models.some((model) => model.name === activeOllamaModel)
-        ? choosePreferredOllamaModel(models)?.name ?? models[0].name
-        : activeOllamaModel
+      const selectedModel =
+        models.length &&
+        !models.some((model) => normalizeModelValue(model.name) === normalizeModelValue(activeOllamaModel))
+          ? choosePreferredOllamaModel(models)?.name ?? models[0].name
+          : activeOllamaModel
       if (selectedModel) {
         setOllamaModel(selectedModel)
       }
@@ -1862,7 +1972,7 @@ function App() {
     clearProviderDiagnostics()
     setIsOllamaBusy(true)
     try {
-      const message = await pullOllamaModel(ollamaBaseUrl, activeOllamaModel)
+      const message = await pullOllamaModel(ollamaBaseUrl, normalizedOllamaModel)
       const models = await listOllamaModels(ollamaBaseUrl)
       setOllamaModels(models)
       setProviderMessage(`${message} Ready for structured edit requests.`)
@@ -1879,7 +1989,7 @@ function App() {
       setProviderDetails(
         formatProviderDetails('Ollama model download error', {
           baseUrl: ollamaBaseUrl,
-          model: activeOllamaModel,
+          model: normalizedOllamaModel,
           error: formatErrorForDetails(error),
         }),
       )
@@ -1909,6 +2019,34 @@ function App() {
     setProposedPatch([])
     setProviderMessage('Edit applied.')
     clearProviderDiagnostics()
+  }
+
+  function applyPendingAnimationDraft() {
+    if (!pendingAnimationDraft) {
+      return
+    }
+
+    commitProject(pendingAnimationDraft.project)
+    setSelectedAnimationId(pendingAnimationDraft.animationId)
+    setSelectedFrameId(pendingAnimationDraft.frameId)
+    setSelectedAtlasFrameIds(new Set(pendingAnimationDraft.atlasFrameIds))
+    setAtlasSelectionAnchorId(pendingAnimationDraft.frameId)
+    setPreviewIndex(0)
+    setWorkspaceMode(pendingAnimationDraft.workspaceMode)
+    setProposedPatch([])
+    setProviderMessage(pendingAnimationDraft.appliedMessage)
+    setPendingAnimationDraft(null)
+  }
+
+  function rejectPendingAnimationDraft() {
+    if (!pendingAnimationDraft) {
+      return
+    }
+
+    setPendingAnimationDraft(null)
+    setProviderReview(null)
+    setProviderDetails('')
+    setProviderMessage('Ollama draft rejected. No project data changed.')
   }
 
   function rejectPatch() {
@@ -2903,7 +3041,32 @@ function App() {
                     <li key={row}>{row}</li>
                   ))}
                 </ul>
+                {providerReview.paletteAdditions?.length ? (
+                  <div className="provider-palette-review" aria-label="Palette additions">
+                    {providerReview.paletteAdditions.map((color) => (
+                      <div key={color.id} className="provider-palette-swatch">
+                        <span style={{ background: color.hex }} aria-hidden="true" />
+                        <div>
+                          <strong>{color.name}</strong>
+                          <small>
+                            {color.id} {color.hex}
+                          </small>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </section>
+            ) : null}
+            {pendingAnimationDraft ? (
+              <div className="draft-review-actions">
+                <button type="button" onClick={applyPendingAnimationDraft}>
+                  Apply Draft
+                </button>
+                <button type="button" onClick={rejectPendingAnimationDraft}>
+                  Reject Draft
+                </button>
+              </div>
             ) : null}
             <ProviderDetails details={providerDetails} />
             <p className="status-line">
@@ -3640,3 +3803,5 @@ function App() {
 }
 
 export default App
+
+

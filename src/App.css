@@ -58,6 +58,40 @@
   gap: 8px;
 }
 
+.segmented {
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.035);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+.segmented button {
+  min-height: 28px;
+  border-color: transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.segmented button:hover:not(:disabled) {
+  border-color: transparent;
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--heading);
+}
+
+.segmented button.active {
+  border-color: rgba(10, 132, 255, 0.36);
+  background: linear-gradient(180deg, rgba(10, 132, 255, 0.22), rgba(10, 132, 255, 0.14));
+  color: var(--heading);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 2px 8px rgba(10, 132, 255, 0.12);
+}
+
 .topbar-actions {
   flex-wrap: nowrap;
   justify-content: flex-end;
@@ -76,33 +110,33 @@
 }
 
 .start-screen {
-  width: min(1120px, calc(100% - 28px));
+  width: min(1040px, calc(100% - 28px));
   margin: 0 auto;
-  padding: 46px 0;
+  padding: 30px 0;
 }
 
 .start-hero {
   max-width: 760px;
-  margin-bottom: 26px;
+  margin-bottom: 18px;
 }
 
 .start-hero h1 {
   margin: 0 0 10px;
   color: var(--heading);
-  font-size: 44px;
+  font-size: 40px;
   line-height: 1;
 }
 
 .start-tagline {
   color: var(--text);
-  font-size: 16px;
+  font-size: 15px;
   max-width: 680px;
 }
 
 .start-grid {
   display: grid;
-  grid-template-columns: minmax(280px, 420px) minmax(260px, 1fr) minmax(220px, 320px);
-  gap: 14px;
+  grid-template-columns: minmax(280px, 390px) minmax(240px, 300px) minmax(220px, 300px);
+  gap: 10px;
   align-items: start;
 }
 
@@ -121,17 +155,23 @@
   gap: 8px;
 }
 
-.template-card {
-  display: grid;
-  gap: 4px;
-  min-height: 74px;
-  padding: 10px;
-  text-align: left;
+.quick-template-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
 }
 
-.template-card span {
-  color: var(--muted);
-  font-size: 12px;
+.template-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 8px 10px;
+  text-align: center;
+}
+
+.template-card strong {
+  overflow-wrap: anywhere;
+  font-size: 13px;
 }
 
 .start-demo-preview {
@@ -231,7 +271,7 @@
   overflow: hidden;
   min-height: 0;
   padding: 8px;
-  background: #0a0b0f;
+  background: var(--stage-bg);
 }
 
 .atlas-overview {
@@ -513,17 +553,14 @@
   display: block;
   width: 88px;
   height: 88px;
+  background-color: var(--transparency-base);
   background-image:
-    linear-gradient(45deg, rgba(255, 255, 255, 0.06) 25%, transparent 25%),
-    linear-gradient(-45deg, rgba(255, 255, 255, 0.06) 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.06) 75%),
-    linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.06) 75%);
+    linear-gradient(45deg, var(--transparency-check-soft) 25%, transparent 25%, transparent 75%, var(--transparency-check-soft) 75%),
+    linear-gradient(45deg, var(--transparency-check-soft) 25%, transparent 25%, transparent 75%, var(--transparency-check-soft) 75%);
   background-position:
     0 0,
-    0 6px,
-    6px -6px,
-    -6px 0;
-  background-size: 12px 12px;
+    9px 9px;
+  background-size: 18px 18px;
 }
 
 .sheet-row-strip button.active {
@@ -688,11 +725,16 @@ label {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-height: 30px;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.026);
   white-space: nowrap;
 }
 
 .toggle-row input {
   width: auto;
+  accent-color: var(--accent);
 }
 
 .palette-selected {
@@ -901,27 +943,28 @@ label {
 
 .transparent-swatch,
 .preview-box,
-.mini-sprite,
-.pixel-cell {
+.mini-sprite {
+  background-color: var(--transparency-base);
   background-image:
-    linear-gradient(45deg, rgba(255, 255, 255, 0.08) 25%, transparent 25%),
-    linear-gradient(-45deg, rgba(255, 255, 255, 0.08) 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.08) 75%),
-    linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.08) 75%);
+    linear-gradient(45deg, var(--transparency-check) 25%, transparent 25%, transparent 75%, var(--transparency-check) 75%),
+    linear-gradient(45deg, var(--transparency-check) 25%, transparent 25%, transparent 75%, var(--transparency-check) 75%);
   background-position:
     0 0,
-    0 6px,
-    6px -6px,
-    -6px 0;
-  background-size: 12px 12px;
+    9px 9px;
+  background-size: 18px 18px;
 }
 
 .pixel-grid {
   --cell-size: clamp(9px, min(1.35vw, 1.65vh), 17px);
   display: grid;
-  border: 1px solid #343846;
-  background: #090a0d;
-  border-radius: 4px;
+  border: 1px solid rgba(176, 188, 212, 0.24);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(255, 255, 255, 0)),
+    var(--canvas-bg);
+  border-radius: 6px;
+  box-shadow:
+    0 10px 36px rgba(0, 0, 0, 0.26),
+    inset 0 1px 0 rgba(255, 255, 255, 0.045);
   touch-action: none;
   user-select: none;
 }
@@ -936,8 +979,11 @@ label {
   overflow: auto;
   overscroll-behavior: contain;
   padding: 14px;
-  background: #06070a;
-  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.045);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.045), transparent 42%),
+    #0d0f15;
+  border-radius: 8px;
 }
 
 .pixel-cell {
@@ -947,8 +993,10 @@ label {
   min-height: 0;
   padding: 0;
   border: 0;
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 0;
+  border-right: 1px solid var(--canvas-grid-line);
+  border-bottom: 1px solid var(--canvas-grid-line);
+  background: var(--canvas-cell-bg);
 }
 
 .pixel-cell:hover {
@@ -987,7 +1035,7 @@ label {
   min-height: 190px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background-color: #151722;
+  background-color: var(--transparency-base);
 }
 
 .solid-preview-background {
@@ -1000,7 +1048,6 @@ label {
   width: 128px;
   height: 128px;
   image-rendering: pixelated;
-  background-color: rgba(255, 255, 255, 0.02);
 }
 
 .mini-sprite span {
@@ -1076,6 +1123,10 @@ label {
   grid-template-columns: 1fr 92px;
   gap: 8px;
   align-items: end;
+  padding: 4px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.026);
 }
 
 .preview-background-controls input[type="color"] {
@@ -1139,11 +1190,67 @@ label {
   padding-left: 16px;
 }
 
+.provider-palette-review {
+  display: grid;
+  gap: 6px;
+}
+
+.provider-palette-swatch {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.provider-palette-swatch > span {
+  width: 20px;
+  height: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+}
+
+.provider-palette-swatch div {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.provider-palette-swatch small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.draft-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .provider-details summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   cursor: pointer;
   padding: 7px 8px;
   color: var(--accent-text);
   font-size: 12px;
+}
+
+.provider-details summary button {
+  min-height: 26px;
+  padding: 3px 8px;
+  font-size: 11px;
+}
+
+.provider-details p[role="status"] {
+  margin: 0;
+  padding: 6px 8px 0;
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .provider-details pre {
@@ -1655,6 +1762,10 @@ kbd {
   grid-template-columns: auto minmax(130px, 170px);
   gap: 8px;
   align-items: end;
+  padding: 4px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.026);
 }
 
 .canvas-background-controls .color-picker-field > span {

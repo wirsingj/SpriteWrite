@@ -31,9 +31,13 @@ export function createSpriteWritePromptIntent(
   const contextLines = createPromptContextLines(context)
 
   if (mode === 'animation-draft') {
+    const interpretation =
+      variationCount > 1
+        ? `SpriteWrite interpretation: Draft ${variationCount} editable animation rows with ${frameCount} frames each from this request.`
+        : `SpriteWrite interpretation: Draft a ${frameCount}-frame editable animation row from this request.`
     const paddedInstruction = [
       `User request: ${userInstruction}`,
-      `SpriteWrite interpretation: Draft a ${frameCount}-frame editable animation row from this request.`,
+      interpretation,
       `Canvas/frame size: ${project.canvas.width}x${project.canvas.height} cells.`,
       ...contextLines,
       `Use only these palette IDs: ${paletteIds}.`,
@@ -41,6 +45,9 @@ export function createSpriteWritePromptIntent(
       'Keep the asset centered unless the user explicitly asks otherwise.',
       'Keep scale, proportions, silhouette, and palette consistent across frames.',
       'Make frame-to-frame motion intentional and easy to read at small pixel size.',
+      variationCount > 1
+        ? 'Each animation row should represent a distinct requested action, pose, variant, or asset from the user request.'
+        : '',
       'For spinning or rotating assets, change silhouette width, highlight position, and shadow position across frames.',
       'For tiles, walls, floors, icons, effects, props, backgrounds, or UI assets, keep the result grid-aligned and export-friendly.',
       'Return structured editable patch JSON only; no raster images, markdown, prose, labels, or placeholder marks.',
@@ -111,7 +118,9 @@ export function inferPromptMode(
 ): SpriteWritePromptMode {
   const normalized = instruction.toLowerCase()
   const asksForFrameSequence = /\b\d+\s*(?:-|to)?\s*\d*\s*frames?\b/.test(normalized)
-  const asksForVariations = /\b\d+\s*(?:frame\s*set\s*)?variations?\b/.test(normalized)
+  const asksForVariations =
+    /\b\d+\s*(?:frame\s*set\s*)?variations?\b/.test(normalized) ||
+    /\b\d+\s*(?:animation\s*)?(?:animations?|rows?)\b/.test(normalized)
   const asksForAnimation = [
     'animation',
     'animated',
@@ -209,6 +218,7 @@ export function inferRequestedVariationCount(instruction: string): number {
   const normalized = instruction.toLowerCase()
   const variationMatch =
     normalized.match(/\b(\d+)\s*(?:frame\s*set\s*)?variations?\b/) ??
+    normalized.match(/\b(\d+)\s*(?:animation\s*)?(?:animations?|rows?)\b/) ??
     normalized.match(/\b(\d+)\s*(?:tile\s*)?(?:sets?|rows?)\b/)
 
   if (!variationMatch) {

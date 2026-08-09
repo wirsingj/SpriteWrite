@@ -12,6 +12,20 @@ if ! [[ "$PORT" =~ ^[0-9]+$ ]] || ((PORT < 1 || PORT > 65535)); then
 fi
 
 export SPRITEWRITE_PORT="$PORT"
-echo "Starting SpriteWrite on port ${PORT}..."
+if [[ -z "${SPRITEWRITE_API_PORT:-}" ]]; then
+  SPRITEWRITE_API_PORT=$((PORT + 1))
+fi
+if [[ "$SPRITEWRITE_API_PORT" -eq "$PORT" ]]; then
+  if [[ "$PORT" -eq 65535 ]]; then
+    SPRITEWRITE_API_PORT=$((PORT - 1))
+  else
+    SPRITEWRITE_API_PORT=$((PORT + 1))
+  fi
+fi
+export SPRITEWRITE_API_PORT
 
+echo "Starting SpriteWrite on port ${PORT}..."
+echo "API on port ${SPRITEWRITE_API_PORT}..."
+
+echo "Starting automation API on http://127.0.0.1:${SPRITEWRITE_API_PORT}"
 npm run dev -- --host 127.0.0.1 --port "$PORT" --strictPort

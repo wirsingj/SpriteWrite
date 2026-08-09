@@ -109,6 +109,31 @@ describe('export planning', () => {
       frameRegionUnit: 'pixels',
       frameRegionBasis: 'top-left',
     })
+    expect(metadata.importProfile).toEqual({
+      kind: 'grid-animation-strip',
+      description:
+        'Slice the image as a one-row fixed grid, then create one animation clip from the declared frame count.',
+      slice: {
+        originX: 1,
+        originY: 1,
+        cellWidth: 32,
+        cellHeight: 32,
+        spacing: 2,
+        columns: 2,
+        rows: 1,
+      },
+      animationClips: [
+        {
+          animationId: 'idle',
+          animationName: 'Idle',
+          rowIndex: 0,
+          startColumn: 0,
+          frameCount: 2,
+          fps: 4,
+          loop: true,
+        },
+      ],
+    })
   })
 
   it('describes one-frame static assets as an exact one-cell import grid', () => {
@@ -265,6 +290,58 @@ describe('export planning', () => {
       originY: 1,
       cellWidth: 32,
       cellHeight: 32,
+    })
+    expect(metadata.importProfile).toEqual({
+      kind: 'grid-animation-rows',
+      description:
+        'Slice the image as a fixed grid, then create one animation clip per row using the declared frame count.',
+      slice: {
+        originX: 1,
+        originY: 1,
+        cellWidth: 32,
+        cellHeight: 32,
+        spacing: 2,
+        columns: 5,
+        rows: 4,
+      },
+      animationClips: [
+        {
+          animationId: 'idle',
+          animationName: 'Idle',
+          rowIndex: 0,
+          startColumn: 0,
+          frameCount: 4,
+          fps: 6,
+          loop: true,
+        },
+        {
+          animationId: 'jump',
+          animationName: 'Jump',
+          rowIndex: 1,
+          startColumn: 0,
+          frameCount: 5,
+          fps: 8,
+          loop: true,
+        },
+        {
+          animationId: 'crouch',
+          animationName: 'Crouch',
+          rowIndex: 2,
+          startColumn: 0,
+          frameCount: 3,
+          fps: 6,
+          loop: true,
+        },
+        {
+          animationId: 'sword_stab',
+          animationName: 'Sword Stab',
+          rowIndex: 3,
+          startColumn: 0,
+          frameCount: 5,
+          fps: 10,
+          loop: true,
+        },
+      ],
     })
     expect(metadata.animations[0]).toMatchObject({
       animationId: 'idle',

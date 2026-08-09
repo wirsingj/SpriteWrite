@@ -166,6 +166,7 @@ export interface SpriteSheetLayout {
   frames: ExportedFrameRegion[]
   grid: SpriteSheetGridMetadata
   importHints: SpriteSheetImportHints
+  importProfile: SpriteSheetGenericImportProfile
 }
 
 export interface FullSpriteSheetLayout {
@@ -187,6 +188,7 @@ export interface FullSpriteSheetLayout {
   frames: FullSpriteSheetFrameRegion[]
   grid: SpriteSheetGridMetadata
   importHints: SpriteSheetImportHints
+  importProfile: SpriteSheetGenericImportProfile
 }
 
 export interface SpriteSheetExportMetadata extends SpriteSheetLayout {
@@ -227,6 +229,31 @@ export interface SpriteSheetImportHints {
   smoothing: false
   frameRegionUnit: 'pixels'
   frameRegionBasis: 'top-left'
+}
+
+export interface SpriteSheetGenericImportProfile {
+  kind: 'grid-animation-strip' | 'grid-animation-rows'
+  description: string
+  slice: {
+    originX: number
+    originY: number
+    cellWidth: number
+    cellHeight: number
+    spacing: number
+    columns: number
+    rows: number
+  }
+  animationClips: SpriteSheetGenericAnimationClip[]
+}
+
+export interface SpriteSheetGenericAnimationClip {
+  animationId: AnimationId
+  animationName: string
+  rowIndex: number
+  startColumn: number
+  frameCount: number
+  fps: number
+  loop: true
 }
 
 export interface FrameExportMetadata {

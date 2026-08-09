@@ -62,8 +62,26 @@ describe('project templates', () => {
     expect(button.palette.map((color) => color.id)).not.toContain('slime_mid')
   })
 
+  it('creates coin and mountain quick-start templates', () => {
+    const coin = getProjectTemplate('coin-32').createProject({ name: 'Coin' })
+    const mountain = getProjectTemplate('mountain-64x32').createProject({ name: 'Mountain' })
+
+    expect(coin.assetType).toBe('object')
+    expect(coin.animations[0]).toMatchObject({ id: 'spin', fps: 10 })
+    expect(coin.frames).toHaveLength(4)
+    expect(coin.palette.find((color) => color.id === 'accent')?.name).toBe('Gold')
+    expect(Object.keys(coin.frames[0].layers[0].cells).length).toBeGreaterThan(80)
+
+    expect(mountain.assetType).toBe('background')
+    expect(mountain.canvas).toEqual({ width: 64, height: 32 })
+    expect(mountain.frames[0].tags).toContain('mountain')
+    expect(Object.keys(mountain.frames[0].layers[0].cells).length).toBeGreaterThan(400)
+  })
+
   it('creates broader starter recipes for tiles, props, backgrounds, and effects', () => {
     const tile = getProjectTemplate('tile-grass-32').createProject({ name: 'Grass Tiles' })
+    const terrain = getProjectTemplate('terrain-tileset-32').createProject({ name: 'Terrain Set' })
+    const wallFloor = getProjectTemplate('wall-floor-tiles-32').createProject({ name: 'Wall Floors' })
     const prop = getProjectTemplate('prop-crate-32').createProject({ name: 'Crate' })
     const background = getProjectTemplate('background-band-64x32').createProject({ name: 'Horizon' })
     const effect = getProjectTemplate('effect-burst-32').createProject({ name: 'Burst' })
@@ -72,6 +90,41 @@ describe('project templates', () => {
     expect(tile.animations[0]).toMatchObject({ id: 'variants', name: 'Variants' })
     expect(tile.frames).toHaveLength(4)
     expect(Object.keys(tile.frames[0].layers[0].cells).length).toBeGreaterThan(80)
+
+    expect(terrain.assetType).toBe('tile')
+    expect(terrain.animations[0]).toMatchObject({ id: 'tileset', name: 'Tileset', fps: 1 })
+    expect(terrain.frames.map((frame) => frame.name)).toEqual([
+      'North West Corner',
+      'North Edge',
+      'North East Corner',
+      'West Edge',
+      'Interior',
+      'East Edge',
+      'South West Corner',
+      'South Edge',
+      'South East Corner',
+    ])
+    expect(terrain.frames).toHaveLength(9)
+    expect(terrain.frames[4].tags).toContain('interior')
+    expect(terrain.frames[0].tags).toContain('edge')
+    expect(Object.keys(terrain.frames[4].layers[0].cells).length).toBe(1024)
+    expect(Object.keys(terrain.frames[0].layers[0].cells).length).toBeLessThan(1024)
+
+    expect(wallFloor.assetType).toBe('tile')
+    expect(wallFloor.animations[0]).toMatchObject({ id: 'tiles', name: 'Tiles', fps: 1 })
+    expect(wallFloor.frames.map((frame) => frame.name)).toEqual([
+      'Floor Interior',
+      'Floor Edge',
+      'Wall Face',
+      'Wall Top',
+      'Wall Corner',
+      'Stair Step',
+    ])
+    expect(wallFloor.frames).toHaveLength(6)
+    expect(wallFloor.frames.every((frame) => frame.tags?.includes('wall'))).toBe(true)
+    expect(wallFloor.frames.every((frame) => frame.tags?.includes('floor'))).toBe(true)
+    expect(Object.keys(wallFloor.frames[0].layers[0].cells).length).toBeGreaterThan(700)
+    expect(Object.keys(wallFloor.frames[5].layers[0].cells).length).toBeLessThan(700)
 
     expect(prop.assetType).toBe('prop')
     expect(prop.canvas).toEqual({ width: 32, height: 32 })

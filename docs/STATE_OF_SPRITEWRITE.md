@@ -48,7 +48,7 @@ The app has no backend, database, auth, cloud sync, paid provider API, Cuddler d
 - Ollama broad animation prompts can request a first-pass structured animation draft made of editable frame operation arrays.
 - Ollama animation drafts can include `paletteAdditions`; SpriteWrite validates and merges those colors before validating frame operations. This lets Ollama propose asset-appropriate colors without SpriteWrite turning into a hard-coded generator for each asset type.
 - Ollama recipe prompts can request compact structured parameters for observed stable structural families: grass tile variation sets, character/hero idle, tentacle creature variation sets, and spinning-object fallback. SpriteWrite expands those recipes into validated editable cell patches; Ollama still does not return opaque raster images. Ordinary rotating/spinning object prompts use direct animation-draft JSON first, then fall back to the compact recipe only after direct quality attempts fail.
-- Accepted structured Ollama animation drafts expose a compact draft review with rows, frame counts, patch-operation totals, palette additions, quality-attempt count, and FPS where available. Provider status messages can still expand into details for Ollama/provider diagnostics, including padded prompt context, model/base URL, validation errors, and attempted edit/draft JSON when available.
+- Valid structured Ollama animation drafts are staged before mutation and expose a compact draft review with rows, frame counts, patch-operation totals, visible swatches for new palette additions, quality-attempt count, FPS where available, and explicit Apply Draft / Reject Draft controls. Provider status messages can still expand into details for Ollama/provider diagnostics, including padded prompt context, model/base URL, validation errors, and attempted edit/draft JSON when available.
 - Ollama animation-draft prompts explicitly forbid rectangle-style `width`/`height` operation fields and tiny marker patches; strict validation still rejects bad model output rather than silently accepting it.
 - Ollama generate requests use deterministic temperature 0 and `think: false`. Selected-frame edit requests use JSON Schema structured output. Animation drafts use lighter JSON mode plus SpriteWrite validation because strict multi-frame operation-array schemas can stall local qwen models. Empty `{}` animation responses are reported as schema-ignored/thinking-mode output.
 - Invalid selected-frame edit proposals no longer draw canvas overlays until validation passes.
@@ -66,7 +66,7 @@ The app has no backend, database, auth, cloud sync, paid provider API, Cuddler d
 - AI Assist with experimental Ollama provider.
 - AI Assist is presented as optional structured edit help so it does not compete with the manual static/animation/export workflow.
 - Valid selected-frame proposals show highlighted canvas cells plus a compact apply/reject proposal bar in the main workspace.
-- Accepted draft reviews expose concise row/frame/operation summaries, while provider details expose padded prompts, validation errors, and returned JSON for debugging rather than permanently showing operation-level controls.
+- Staged draft reviews expose concise row/frame/operation summaries, new palette color swatches, and apply/reject controls, while provider details expose padded prompts, validation errors, returned JSON, and a Copy All button for debugging rather than permanently showing operation-level controls.
 - Edit validation error display.
 - Accept/reject edit workflow.
 - Project JSON export/import.
@@ -81,7 +81,7 @@ The app has no backend, database, auth, cloud sync, paid provider API, Cuddler d
 - Pure animation-strip layout planning through `createSpriteSheetLayout()` and pure full-sheet layout planning through `createFullSpriteSheetLayout()`.
 - Pure RGBA export rendering through `renderFrameToRgbaBuffer()` and `renderAnimationToRgbaBuffer()`.
 - Start/home screen and editor screen app modes.
-- Project templates for blank 32x32, blank 64x64, icon 32x32, UI button 64x24, grass tile variants, prop crate, background band, effect burst, hero 32x32 sprite sheet demo, and ooze 32x32 reference.
+- Project templates for blank 32x32, blank 64x64, icon 32x32, UI button 64x24, grass tile variants, a 3x3 terrain edge/corner/interior tileset, wall/floor tile strip, prop crate, background band, effect burst, hero 32x32 sprite sheet demo, and ooze 32x32 reference.
 - Project identity fields for optional description and asset type.
 - Palette color add, reorder, selected-color name/hex edit, and unused-color delete.
 
@@ -142,13 +142,14 @@ AI Assist state:
 - Plain prompts are padded by SpriteWrite before provider calls. Small edit prompts route to selected-frame edit JSON; static whole-asset prompts such as "gold coin" route to a larger single-frame draft budget; multi-frame or animation prompts route to direct animation-draft JSON first, with recipe fallback only for stable families when direct attempts fail or when variation-set recipes are explicitly useful.
 - Prompt context is explicit in the AI Assist UI. `Static frame / tile` biases prompt padding toward complete one-frame assets such as ground, walls, floors, props, icons, and backgrounds; `Animated row` biases terse prompts toward animation drafting; view angle context adds side-scroller, top-down, or 2.5D/three-quarter guidance.
 - Broad prompts such as "hero idle" or a character idle animation route to structured animation drafting instead of selected-frame edit JSON.
-- Multi-variation prompts such as "short grass waving, 3 frames, 4 variations" or "tentacle monster, 3 variations" can return multiple animation rows. SpriteWrite replaces the selected row with the first returned animation and appends additional returned rows after validation.
-- Animation drafts are validated frame-by-frame and rejected before mutation if cells are invalid, out of bounds, use unknown colors, or look too scattered.
+- Numbered animation prompts such as "3 animations: monk jumping, kneeling, punching" route to multi-row animation-set drafting instead of a single default animation row.
+- Multi-variation prompts such as "short grass waving, 3 frames, 4 variations" or "tentacle monster, 3 variations" can return multiple animation rows. SpriteWrite validates the result, stages a draft review, then reuses an empty selected starter row or appends new rows only when the user applies the staged draft. Existing non-empty rows are preserved unless the prompt clearly asks to replace/update the current row.
+- Animation drafts are validated frame-by-frame and rejected before mutation if cells are invalid, out of bounds, use unknown colors, look too scattered, or jump too abruptly between neighboring frames.
 - Vision-oriented Ollama models are not blocked, but the UI warns that they may be a poor fit for strict JSON editing. When model capabilities or Ollama details are available, refresh avoids auto-selecting a vision model if a non-vision model is available.
 - Selected-frame Ollama edit parsing accepts raw arrays, `patch`, `operations`, `ops`, `patchOperations`, `patch_operations`, and single-operation objects. Wrong JSON shapes now produce more specific status errors instead of vague provider-contract messages.
 - Ollama generation controls.
 - Valid selected-frame proposals are highlighted directly on the canvas with a compact apply/reject bar.
-- Accepted animation drafts show a compact review summary. Provider details can expand to show padded prompt context, validation errors, and raw returned JSON.
+- Valid animation drafts show a compact review summary with palette-addition swatches plus Apply Draft and Reject Draft controls. Provider details can expand to show padded prompt context, validation errors, and raw returned JSON.
 - Validation errors.
 - Apply and reject buttons.
 
@@ -184,7 +185,7 @@ Current PNG export guarantees:
 - Animation strip frame order matches selected animation frame order.
 - Full sprite sheet row order matches project animation order; column order matches each animation's frame order; short-row padding remains transparent.
 
-Current full sprite sheet metadata includes `formatName`, `formatVersion`, image filename, project identity, source frame size, exported frame size, sheet size, row/column counts, orientation, scale, margin, spacing, animation ordering, row indices, frame counts, FPS, loop behavior, flat layer order with optional group labels, frame names, columns, per-frame x/y/width/height, durations, anchors, tags, hitboxes when present, and a boring grid/import hint block for engine/custom importer workflows.
+Current animation-strip and full sprite sheet metadata include `formatName`, `formatVersion`, image/project identity, source frame size, exported frame size, sheet size, row/column counts, orientation, scale, margin, spacing, animation ordering, frame counts, FPS, loop behavior, frame names, per-frame x/y/width/height, durations, anchors, tags, hitboxes when present, boring grid/import hint blocks, and generic `grid-animation-strip` / `grid-animation-rows` import profiles for engine/custom importer workflows. Full-sheet metadata also includes row indices, frame columns, flat layer order with optional group labels, and transparent short-row padding.
 
 Import validation is implemented through the pure `validateProject()` function in `src/domain/spriteData.ts`. Invalid imports do not replace the current project. Validation errors are shown in the UI. Successful imports replace the project and reset undo/redo history intentionally.
 
@@ -221,7 +222,7 @@ Covered:
 - project template creation
 - blank 32x32 and blank 64x64 template dimensions
 - neutral non-ooze palettes on blank/icon/UI button templates
-- broader starter recipes for grass tile variants, prop crate, background band, and effect burst templates
+- broader starter recipes for grass tile variants, a 3x3 terrain edge/corner/interior tileset, wall/floor tile strip, prop crate, background band, and effect burst templates
 - hero sprite sheet demo template with Idle, Jump, Crouch, and Sword Stab rows
 - ooze reference template animation/frame data
 - template projects passing `validateProject()`
@@ -339,8 +340,9 @@ Covered:
 - app smoke test proving a plain "4-6 frame gold coin spinning animation" request is padded into a 6-frame animation draft before Ollama sees it
 - app smoke test proving a grass variation recipe creates multiple editable animation rows and switches to the full sprite sheet view
 - app smoke test proving a tentacle variation recipe creates connected editable animation rows and switches to the full sprite sheet view
-- app smoke tests for compact accepted-draft review summaries on direct animation drafts and recipe-expanded animation sets
+- app smoke tests for staged draft review summaries, palette-addition swatches, Apply Draft mutation, and Reject Draft no-mutation behavior on direct animation drafts and recipe-expanded animation sets
 - app smoke tests for expandable provider details on invalid selected-frame edits and rejected animation drafts
+- component coverage for copying the full provider details payload
 - app smoke test proving invalid selected-frame Ollama edits do not render canvas proposal overlays
 - app smoke test proving the AI provider defaults to local Ollama
 - app smoke test for warning when a vision-oriented Ollama model is selected
@@ -348,11 +350,11 @@ Covered:
 Not covered yet:
 
 - Real browser/export download flows.
-- In-app browser smoke has verified app load, generic project creation, editor grid count, and visible export controls, but blob-anchor download events were not observable through that automation surface.
+- In-app browser smoke on 2026-07-18 verified app load, terrain template visibility, Hero demo editor load, 32x32 grid count, visible export controls, full-sheet row view, and no captured console errors. Blob-anchor download events were still not observable through that automation surface.
 - Deeper React UI workflows beyond current shell/import/editor smoke tests.
 - Undo/redo edge cases beyond current paint, accepted-patch, redo-clearing, frame add/duplicate/delete, layer visibility, palette color edit, animation add, and frame metadata coverage.
 - Frame edge cases beyond the current add-blank and duplicate-cell-data smoke tests.
-- deeper template families such as tile edge/corner/interior sets, larger prop/background/effect variants, and intent presets
+- deeper template families such as larger prop/background/effect variants, view-aware terrain/wall/floor sets, and intent presets
 
 ## Known Limitations
 
@@ -364,12 +366,12 @@ Not covered yet:
 - The previous operation-level edit diff UI was removed from the normal creative surface; selected-frame proposals now use highlighted canvas cells plus an apply/reject bar, with detailed JSON in provider details when needed.
 - No project schema migration system.
 - Palette editing supports add, reorder, selected color name/hex updates through an in-app color picker, and unused-color delete, but not palette extraction yet. Add Color opens the palette editor and picker for the new color.
-- Multi-animation UI supports add, switch, duplicate, rename, reorder, and delete. First starter recipes now cover tile variants and an effect burst animation, but deeper animation-specific template families remain future work.
+- Multi-animation UI supports add, switch, duplicate, rename, reorder, and delete. First starter recipes now cover tile variants, a 3x3 terrain tileset, a wall/floor strip, and an effect burst animation, but deeper animation-specific template families remain future work.
 - Atlas rows support first-pass frame selection, drag reorder, selected-frame duplicate/delete actions, selected-frame duration/notes/tags editing, visible duration labels, and a full-sheet pullback view, but row-level affordances still need more polish.
-- The refactored editor is calmer, more canvas-first, and now uses a graphite/blue Mac-like theme. Tool icons, contextual inspector grouping, timeline duration cues, and accepted-draft review summaries now have first-pass coverage; deeper structured draft preview/acceptance remains first-class UX work.
+- The refactored editor is calmer, more canvas-first, and now uses a graphite/blue Mac-like theme. Tool icons, contextual inspector grouping, timeline duration cues, and staged draft review summaries now have first-pass coverage; deeper visual draft preview/partial acceptance remains first-class UX work.
 - Keyboard shortcuts are fixed for paint, erase, frame navigation, preview, undo/redo, and command palette. Stale legacy custom mappings are ignored so visible hints match actual keys.
 - The command palette is searchable through `Ctrl+K`, but it no longer has a permanent header button and does not yet support command grouping. User-defined shortcuts remain intentionally absent unless the workflow later proves they are needed.
-- No engine-specific Godot or Unity export profiles yet; the current source format and metadata remain engine-neutral.
+- No engine-specific Godot or Unity export profiles yet; the current source format and metadata remain engine-neutral with a generic row-based import profile.
 - PNG golden regression coverage now exists for the deterministic encoder. Pixel-level buffer tests cover the export source before PNG encoding, and jsdom tests smoke-check valid PNG binary output from the PNG blob export path.
 - Export UI exposes scale, margin, and spacing for current animation strips and full sprite sheets.
 - Static assets are currently represented as one-frame frame sequences inside the same project model, then exported through Current Frame PNG or one-frame sheet/metadata if needed.
@@ -377,8 +379,8 @@ Not covered yet:
 
 ## Next Best Development Steps
 
-1. Improve structured draft preview-before-commit, retry choice, and partial row acceptance for Ollama while preserving the cleaner drawing tool, filmstrip, frame-inspector, and accepted-draft review hierarchy.
-2. Expand asset recipes beyond first starters: tile edge/corner/interior sets, richer props/backgrounds/effects, and view-aware defaults.
+1. Improve structured draft visual preview, retry choice, and partial row acceptance for Ollama while preserving the cleaner drawing tool, filmstrip, frame-inspector, and staged-draft review hierarchy.
+2. Expand asset recipes beyond first starters: richer props/backgrounds/effects, larger terrain variants, and view-aware defaults.
 3. Add real browser-level export/download checks where the automation backend can observe blob downloads.
 4. Expand layer grouping beyond labels only if nested folders or bulk folder actions clearly help the workflow.
 5. Keep shortcuts fixed unless the workflow clearly needs customization; the old persistent shortcut settings panel was removed from the left dock because it cluttered normal drawing.

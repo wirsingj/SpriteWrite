@@ -6,11 +6,24 @@ set "PORT=%~1"
 if not defined PORT set "PORT=%SPRITEWRITE_PORT%"
 if not defined PORT set "PORT=5173"
 
+if not defined SPRITEWRITE_API_PORT set /A SPRITEWRITE_API_PORT=%PORT% + 1
+if "%SPRITEWRITE_API_PORT%"=="%PORT%" (
+  if "%PORT%"=="65535" (
+    set /A SPRITEWRITE_API_PORT=%PORT% - 1
+  ) else (
+    set /A SPRITEWRITE_API_PORT=%PORT% + 1
+  )
+)
+
 set "SPRITEWRITE_PORT=%PORT%"
 set "SPRITEWRITE_DEV_LOG=%CD%\spritewrite-dev.log"
 
+if not defined SPRITEWRITE_API_HOST set "SPRITEWRITE_API_HOST=127.0.0.1"
+
+set "API_PORT=%SPRITEWRITE_API_PORT%"
+
 echo.
-echo Starting SpriteWrite in background on port %PORT%...
+echo Starting SpriteWrite in background on UI port %PORT% and API port %API_PORT%...
 echo.
 if exist "%SPRITEWRITE_DEV_LOG%" del "%SPRITEWRITE_DEV_LOG%" >nul 2>&1
 echo.

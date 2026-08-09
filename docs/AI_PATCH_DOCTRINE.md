@@ -55,7 +55,7 @@ requestAnimationDraft({
 }>
 ```
 
-Use the selected-frame patch rail for small edits such as "add a highlight" or "fix the outline." Use the single-frame draft rail for static whole assets. Use the animation-draft rail for multi-frame prompts such as "hero wearing a cape, standing animation" or "a 4-6 frame coin spin." Draft frames must be validated before they replace or create animation frames.
+Use the selected-frame patch rail for small edits such as "add a highlight" or "fix the outline." Use the single-frame draft rail for static whole assets. Use the animation-draft rail for multi-frame prompts such as "hero wearing a cape, standing animation" or "a 4-6 frame coin spin." Draft frames must be validated and staged for explicit user apply/reject before they replace or create animation frames. New palette additions must be visible in review before apply.
 
 Future provider rails may suggest structured palette changes, duplicated-and-modified frames, or explicit layer operations. They should still be validated, previewed, accepted, rejected, undoable, and manually editable.
 
@@ -102,6 +102,7 @@ Providers must not:
 - Edit missing or hidden layers.
 - Bypass validation.
 - Apply changes automatically.
+- Teleport a coherent sprite between neighboring animation frames unless the user explicitly requested a distributed tile/background effect.
 
 ## Validation Rules
 

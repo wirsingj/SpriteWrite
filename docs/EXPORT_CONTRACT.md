@@ -100,6 +100,8 @@ Margins and spacing remain transparent unless a future explicit background optio
 
 A one-frame animation is valid. It can be used as a one-frame sheet/metadata export when a downstream importer expects sheet-style data even for static assets.
 
+Animation-strip metadata includes a generic `grid-animation-strip` import profile with one-row slice settings and a single clip for the exported animation.
+
 ## Full Sprite Sheet PNG
 
 For full project sprite-sheet export:
@@ -146,6 +148,7 @@ Metadata includes:
 - `spacing`
 - `grid` with columns, rows, origin, cell size, margin, and spacing for boring grid import.
 - `importHints` with straight alpha, transparent background, no premultiplied alpha, no smoothing, pixel frame-region units, and top-left region basis.
+- `importProfile` with a generic `grid-animation-rows` profile: slice origin, cell size, spacing, row/column counts, and one animation clip per row. Current-animation strip metadata uses the sibling `grid-animation-strip` profile with one row and one clip.
 - `animations[]` with animation id, animation name, row index, frame count, FPS, loop behavior, and frame regions.
 - top-level `frames[]` flattened in deterministic row-major order.
 - each frame region includes animation id/name, frame id/name, row index, column index, x, y, width, height, duration, optional notes, tags, anchor, and hitbox when present.
@@ -157,6 +160,7 @@ For engine importers, the boring default is:
 - Slice from `grid.originX`, `grid.originY`.
 - Use `grid.cellWidth` and `grid.cellHeight` as the frame size.
 - Use `grid.spacing` between frames.
+- Or read `importProfile.slice` and `importProfile.animationClips[]` directly when the importer wants a single generic recipe for row-based animation clips.
 - Read `frames[]` when an importer wants explicit per-frame rectangles.
 - Treat all rectangle coordinates and dimensions as output PNG pixels, not source-grid cells.
 - Disable filtering/smoothing in the engine importer for pixel art.
