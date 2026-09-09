@@ -6,8 +6,10 @@ purpose: Durable SpriteWrite product scope, AI-assistance model, asset categorie
 belongs-here: product boundaries, asset scope, AI assistance principles, recipe model, export positioning, declared human intent.
 not-here: volatile implementation state, command reference, detailed test inventory, complete feature history.
 durability: stable; update when the product center or product boundaries change.
+budget: About 900 words; a working target for durable product scope.
 read-with: SOT; Architecture; docs/STATE_OF_SPRITEWRITE.md; docs/APP_FLOW.md; docs/AI_PATCH_DOCTRINE.md; docs/EXPORT_CONTRACT.md.
 update-when: product scope, AI principles, asset categories, recipe strategy, or export positioning changes.
+last-verified: not established; claims not rechecked in this refresh.
 agent-guidance: Preserve broad product scope. Do not narrow SpriteWrite to one game, engine, model, or demo asset. Mark implementation gaps separately.
 ---
 

@@ -6,8 +6,10 @@ purpose: Durable system shape, boundaries, data flow, invariants, and danger zon
 belongs-here: components, boundaries, canonical data model, invariants, current and intended architecture, known violations, retired approaches.
 not-here: volatile roadmap, command reference, complete feature history.
 durability: stable; update when system shape or invariants change.
+budget: About 1500 words; a working target for durable system shape, subject to evidence needs.
 read-with: SOT; Maintainer Guide; docs/PRODUCT_VISION.md; docs/APP_FLOW.md; docs/EXPORT_CONTRACT.md; docs/AI_PATCH_DOCTRINE.md.
 update-when: core data model, module boundaries, export pipeline, provider architecture, or architectural constraints change.
+last-verified: not established; claims not rechecked in this refresh.
 agent-guidance: Prefer existing patterns. Keep project data canonical. Do not introduce hidden state, opaque raster sources, or unnecessary infrastructure.
 ---
 

@@ -6,8 +6,10 @@ purpose: Current engineering state and direction for the project.
 belongs-here: goals, current capabilities, declared direction, active risks, priorities, divergence, uncertainty, useful recent lessons.
 not-here: durable architecture, command reference, complete history.
 durability: volatile; synthesize and prune aggressively.
+budget: About 1800 words; a working target, not a length to fill. Currently about 2700 words; compress inherited state on the next SoT update rather than in a convention refresh.
 read-with: Architecture; Maintainer Guide; docs/PRODUCT_VISION.md; docs/STATE_OF_SPRITEWRITE.md.
 update-when: direction, verified reality, risks, priorities, or useful engineering lessons change.
+last-verified: not established; claims not rechecked in this refresh.
 agent-guidance: Verify implementation claims. Preserve human intent. Mark uncertainty. Surface conflicts. Prune stale detail.
 ---
 

@@ -6,8 +6,10 @@ purpose: Operating knowledge for setup, checks, diagnostics, and safe maintenanc
 belongs-here: commands, environment notes, focused checks, important files, danger files, diagnostics, failure playbooks, unverified procedures.
 not-here: product roadmap, durable architecture narrative, complete implementation history.
 durability: moderately stable; keep concise and practical.
+budget: About 1200 words; a working target; keep procedures concise rather than exhaustive.
 read-with: SOT; Architecture; README.md; docs/PRODUCT_VISION.md; docs/DEV_LOOP.md; docs/AUDIT_CHECKLIST.md.
 update-when: commands, setup, checks, common failures, generated files, or maintenance practices change.
+last-verified: not established; claims not rechecked in this refresh.
 agent-guidance: Run focused checks for touched areas. Do not reset or discard work. Report uncertainty and exact command results.
 ---
 
