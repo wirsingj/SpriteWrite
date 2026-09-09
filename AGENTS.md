@@ -2,16 +2,16 @@
 
 Use YAIML as SpriteWrite project memory, not as a replacement for task-specific instructions.
 
-Before meaningful work:
+## YAIML Project Memory
 
-1. Read `yaiml.yml`.
-2. Read the stable header of each declared YAIML document before its body.
-3. Read the core YAIML documents declared in `yaiml.yml`: SoT for current state and priorities, Architecture for durable system shape, and Maintainer Guide for commands and diagnostics.
-4. Load supporting project documents only when the current task touches their domain.
-5. Verify task-relevant YAIML claims against repository reality before relying on them.
+Before meaningful work, read `yaiml.yml` and its core documents: SoT for current state, Architecture for system boundaries, and Maintainer Guide for procedures. Read each selected document's stable header before its body. Load supporting material only when task-relevant, reuse already-loaded context while current, and verify consequential claims against the repository.
 
-Read `docs/PRODUCT_VISION.md` for work that touches product scope, UX hierarchy, AI assistance, asset recipes, templates, exports, or engine-consumer positioning.
+Before finishing material work, update affected memory and prune stale state without waiting for a separate YAIML request. Respect read-only task scope; report pending updates when writing is unavailable. Leave unchanged memory alone. Preserve declared direction, evidence scope, uncertainty, and unresolved contributor disagreements. Do not append a work diary.
 
-After material changes, update only the affected YAIML documents and prune stale current-state information. Do not turn YAIML into a work log.
+"Update YAIML", "updated YAIML", "check new YAIML", or "run a YAIML update" means refresh convention guidance from a human-provided, workspace-local, or team-approved reference. Preserve project memory and the existing discovery layout.
 
-Treat phrases such as "update YAIML", "updated YAIML", "check new YAIML", or "run a YAIML update" as convention-refresh requests: compare local YAIML scaffolding against a human-provided, workspace-provided, or team-approved YAIML reference, refresh compatible prompts/templates/guidance/agent pointers, and preserve SpriteWrite-specific project memory.
+"Clean up YAIML", "compress YAIML", "compact project memory", "prune project memory", or "prune SoT" means remove stale or repetitive memory while preserving current truth, direction, evidence, and uncertainty.
+
+See the Maintainer Guide for local YAIML maintenance.
+
+Read docs/PRODUCT_VISION.md for work that touches product scope, UX hierarchy, AI assistance, asset recipes, templates, exports, or engine-consumer positioning.

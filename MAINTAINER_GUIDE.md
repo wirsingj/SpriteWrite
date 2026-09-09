@@ -138,19 +138,13 @@ On 2026-07-01, `git status --short` reported the repository contents as untracke
 
 ## YAIML Maintenance
 
-Phrases such as "update YAIML", "updated YAIML", "check new YAIML", or "run a YAIML update" mean to compare this repository's local YAIML convention scaffolding against a human-provided, workspace-provided, or team-approved YAIML reference, refresh compatible prompts/templates/guidance/agent-instruction pointers, and preserve SpriteWrite-specific SoT, Architecture, Maintainer Guide, risks, commands, human decisions, and supporting project memory.
+Provide the YAIML reference from the human prompt, workspace context, or a team-approved source at run time. Do not commit machine-specific reference paths, local drive names, user profile paths, `file://` URIs, localhost URLs, private workspace URLs, secrets, private transcripts, or raw sensitive logs into versioned project memory.
 
-This is different from updating project memory after ordinary SpriteWrite work. For ordinary work, update only the affected YAIML documents and prune stale current-state information.
+Phrases such as "update YAIML", "updated YAIML", "check new YAIML", "refresh YAIML", or "run a YAIML update" mean convention refresh, not an ordinary project-memory rewrite. For this repository, compare local YAIML scaffolding against the provided reference and update only compatible prompts, templates, discovery hints, agent-instruction pointers, or YAIML-maintenance guidance. Preserve project memory and the existing discovery layout unless a human explicitly authorizes a layout migration.
 
-For YAIML refreshes:
+Phrases such as "clean up YAIML", "compress YAIML", "compact project memory", "prune project memory", or "prune SoT" mean to remove stale or repetitive memory while preserving current truth, evidence, human direction, decisions, unresolved conflicts, and uncertainty. Do not pad documents to meet budgets or delete necessary governed knowledge just to reduce word count.
 
-1. Inspect `AGENTS.md`, `yaiml.yml`, and the current headers for the core YAIML documents first.
-2. Compare local prompts/templates/guidance against the applicable YAIML reference for convention, while preserving this repo’s project memory and local file layout.
-3. Keep machine paths and environment-specific details out of versioned files.
-4. Record configured persistence separately from observed loading behavior, and keep the refresh scoped to docs/config only.
-5. If a compatible reference is unavailable, report that explicitly instead of guessing.
-
-Do not edit application code, install dependencies, or run expensive app checks when you are only refreshing YAIML convention scaffolding.
+This repository does not need local YAIML prompt or template copies unless it already keeps them for a concrete workflow. Do not add `prompts/` or `templates/` just because the reference has them. Preserve project-specific SoT, Architecture, Maintainer Guide, risks, commands, naming, and supporting documents unless the reference changes how future agents should maintain YAIML here.
 
 ## Diagnostics
 
@@ -196,4 +190,3 @@ Use this flow for reliable startup recovery:
 - Do not add real Cuddler or OllamaSaddle dependencies.
 - Do not store secrets or personal sensitive data in YAIML files.
 - Update YAIML when the durable understanding changes, not for every small implementation detail.
-
