@@ -142,6 +142,16 @@ Phrases such as "update YAIML", "updated YAIML", "check new YAIML", or "run a YA
 
 This is different from updating project memory after ordinary SpriteWrite work. For ordinary work, update only the affected YAIML documents and prune stale current-state information.
 
+For YAIML refreshes:
+
+1. Inspect `AGENTS.md`, `yaiml.yml`, and the current headers for the core YAIML documents first.
+2. Compare local prompts/templates/guidance against the applicable YAIML reference for convention, while preserving this repo’s project memory and local file layout.
+3. Keep machine paths and environment-specific details out of versioned files.
+4. Record configured persistence separately from observed loading behavior, and keep the refresh scoped to docs/config only.
+5. If a compatible reference is unavailable, report that explicitly instead of guessing.
+
+Do not edit application code, install dependencies, or run expensive app checks when you are only refreshing YAIML convention scaffolding.
+
 ## Diagnostics
 
 If the local browser cannot connect to Vite, restart it from the repo root:
