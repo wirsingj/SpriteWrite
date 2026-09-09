@@ -4,6 +4,10 @@ SpriteWrite is a local-first, AI-assisted pixel asset studio for making editable
 
 The source of truth in SpriteWrite is not a PNG. It is explicit sprite data: canvas dimensions, palette IDs, layers, frames, frame notes/tags, animations, anchors, hitboxes, metadata, and JSON patch operations.
 
+## AI Usage
+
+This project is maintained with AI-assisted development. See [AI_USAGE.md](AI_USAGE.md) for the disclosure and provenance expectations.
+
 ## What SpriteWrite Is
 
 - A structured pixel editor for game and creative assets.
