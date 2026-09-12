@@ -6,7 +6,7 @@ purpose: Current engineering state and direction for the project.
 belongs-here: goals, current capabilities, declared direction, active risks, priorities, divergence, uncertainty, useful recent lessons.
 not-here: durable architecture, command reference, complete history.
 durability: volatile; synthesize and prune aggressively.
-budget: About 1800 words; a working target, not a length to fill. Currently about 2700 words; compress inherited state on the next SoT update rather than in a convention refresh.
+budget: About 1800 words; a working target, not a length to fill.
 read-with: Architecture; Maintainer Guide; docs/PRODUCT_VISION.md; docs/STATE_OF_SPRITEWRITE.md.
 update-when: direction, verified reality, risks, priorities, or useful engineering lessons change.
 last-verified: not established; claims not rechecked in this refresh.
@@ -55,8 +55,7 @@ Verified from repository docs and source inspection on 2026-07-01:
 - AI Assist exposes the experimental Ollama provider with local model refresh/download controls. A deterministic Mock provider remains in code as an internal/test fixture, but it is no longer visible in the creative UI.
 - The visible AI provider defaults to Ollama local. In the real browser app, SpriteWrite performs one startup model refresh automatically so users do not need to manually switch providers and refresh models before trying local Ollama. Vitest skips this browser-startup network work.
 - Ollama model refresh uses a real installed-model selector, preserves manual model-name entry for downloads/custom names, derives vision suitability from Ollama `details.families` when top-level capabilities are absent, and reports discovered model names in status text.
-- Model-name handling in Ollama flows is normalized for whitespace and casing so launch-time and ad-hoc provider calls stay aligned even when users paste model names with extra spaces or different capitalization.
-- Ollama model discovery normalizes installed model names (trim/case-normalized) and de-duplicates duplicates before matching, so refresh and startup selection stay stable when the API list contains repeated names.
+- Ollama model names are trimmed, case-normalized, and deduplicated before matching so startup, refresh, and ad-hoc calls stay aligned despite pasted whitespace, casing, or repeated API entries.
 - SpriteWrite now pads plain asset prompts before they reach Ollama: small edits route to selected-frame edits, static asset requests route to larger single-frame drafts, and multi-frame/animation requests route to 3-6 frame animation drafts.
 - AI Assist now includes prompt context controls for output intent (`Auto`, `Static frame / tile`, `Animated row`) and view angle (`Auto`, `Side-scroller`, `Top-down`, `2.5D / three-quarter`). These context values are injected into SpriteWrite's padded Ollama instructions so static tile/wall/ground/background-style requests can carry game-view assumptions without the user hand-writing prompt boilerplate.
 - Ollama broad animation prompts route to a structured draft path with a critique-and-repair loop: editable drafts are requested, validated for patch correctness plus basic intent cues such as frame count, readable cell count, material/color fit, neighboring-frame continuity, rotation motion, and tile/grass anchoring, then retried with SpriteWrite feedback before rejection. Valid drafts are staged with explicit Apply Draft / Reject Draft controls before they mutate the project.
@@ -92,7 +91,6 @@ Latest verified run on 2026-07-26: `npm run build`, `npm test -- --run`, `npm ru
 
 ## Current Risks And Uncertainty
 
-- `git status --short` on 2026-07-01 reported the repository contents as untracked. Treat the whole tree as intentional work in progress unless the human says otherwise.
 - `docs/STATE_OF_SPRITEWRITE.md` is detailed and useful, but future agents should verify it against source before relying on every implementation claim.
 - Real browser-level download/export flows are still partially unresolved: the in-app browser can verify Project JSON export state, but it still does not expose blob download events and did not surface PNG export status through the automation backend during the 2026-07-18 audit. Non-browser coverage now exercises Project JSON import/export UI behavior, full sprite sheet metadata export UI behavior, current-frame/current-animation/full-sheet PNG export UI behavior, browser download helpers, deterministic PNG encoder golden bytes, and PNG binary smoke checks.
 - In-app browser smoke on 2026-07-18 verified the start screen, terrain template visibility, Hero demo editor load, 32x32 grid cell count, visible export controls, full-sheet row view, and no captured console errors through the local Vite dev server. Browser automation still does not provide durable blob-anchor download-event coverage, so real download-event coverage remains unresolved.
