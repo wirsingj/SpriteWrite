@@ -158,4 +158,4 @@ Do not import or depend on Cuddler or OllamaSaddle. Future integrations should h
 - Adding persistence/cloud/backend infrastructure before the local project/export workflow is stable.
 - Changing `SpriteProject` shape without updating validation, templates, exports, metadata, tests, and docs.
 - Confusing editor visibility with export inclusion.
-- Overwriting uncommitted work; this repo currently appears to be work in progress.
+- Overwriting uncommitted work; inspect the worktree before editing.

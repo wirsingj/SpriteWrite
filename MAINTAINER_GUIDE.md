@@ -136,13 +136,15 @@ Inspect `git status --short` before editing and preserve unrelated work. Do not 
 
 ## Agent Instructions Found
 
-`AGENTS.md` exists as a generic YAIML entrypoint for future coding agents. No `CLAUDE.md`, `.cursorrules`, or contribution docs are currently present. Existing useful project docs are `README.md` and files under `docs/`.
+The tracked root `AGENTS.md` is the repository-wide Codex entrypoint; resolve its YAIML paths from the repository root even when working in subdirectories. Its instructions were supplied in this session. Automatic loading in a separate fresh session has not been tested. No other tracked agent or contribution instruction files were found.
 
 ## YAIML Maintenance
 
 Follow the synthesis rules in `AGENTS.md`: update the existing account of changed facts, remove superseded claims and resolved items, and retain completed work only as capability, constraint, decision, or an actionable lesson. Keep one detailed home per fact; never relocate run history just to shorten the core.
 
 For convention refreshes, use the human-provided, workspace-local, or team-approved reference; request one if absent. Compare its update and init guidance with local instructions and maintenance notes. Preserve project knowledge, discovery layout/version, local names, budgets, custom fields, and review rules. Do not add prompt/template copies without a concrete workflow need.
+
+Coordinate concurrent writers through separate workspaces or explicit file ownership; re-reading is not a lock. Keep routine edits passage-scoped and arrange broad compression separately. Before PR/MR integration, reconcile affected memory with the actual target and combined changes, including clean merges. Preserve independent contributions and unresolved decisions under existing review authority. Distinguish branch implementation from deployment; follow task-authorized commit/push permissions.
 
 For refreshes and compression, measure whole-document whitespace-delimited words before and after; compress affected memory safely first. Preserve human direction, evidence scope, uncertainty, unresolved conflicts, and governed retention. Report necessary growth, retained overages, and next actions in the task response, not memory. Never pad, inflate budgets, or delete necessary knowledge to meet a number.
 

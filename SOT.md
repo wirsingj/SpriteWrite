@@ -37,9 +37,9 @@ Declared product boundary: SpriteWrite must not be defined as an OozeTactics-spe
 - PNG/canvas output is derived from project data and is not source of truth.
 - Avoid treating "N-bit" language as a technical model assumption; represent concrete canvas dimensions, cell dimensions, palette constraints, scale, animation structure, and export profiles instead.
 
-## Verified Current Capabilities
+## Recorded Capabilities
 
-Verified from repository docs and source inspection on 2026-07-01:
+Prior project memory records source inspection from 2026-07-01 and later additions below. These describe the checkout's implementation, not deployment or a fresh verification of every feature.
 
 - Vite, React, TypeScript, plain CSS, and Vitest app.
 - Home/start screen plus editor screen.
@@ -68,7 +68,7 @@ Verified from repository docs and source inspection on 2026-07-01:
 - Ollama requests now show attempt number and elapsed time in status/details, and app coverage verifies a second click after a rejected animation draft sends a second provider request.
 - Ollama animation-draft prompts now explicitly forbid rectangle-style `width`/`height` operation fields and tiny marker patches after observed `llama3.2:3b` output violated the cell-operation contract.
 - Ollama generate calls set `think: false` and temperature 0 after observed `qwen3:14b` output returned `{}` when thinking was left enabled/implicit. Selected-frame patch calls use JSON Schema structured output; animation drafts use lighter JSON mode plus SpriteWrite validation because multi-frame operation-array schemas can stall local qwen.
-- `npm run test:ollama` is a deliberate live quality probe that calls local `qwen3:14b` for natural prompts such as a 4-frame rotating golden coin and grass animation variations, then fails loudly with SpriteWrite critique details if the drafts do not match the requested intent. If qwen has stuck work from aborted requests, unloading the model with Ollama `keep_alive: 0` can clear the queue.
+- Live quality probes exercise natural asset prompts through local `qwen3:14b` and report SpriteWrite critique failures. Commands and stuck-request recovery are in `MAINTAINER_GUIDE.md`.
 - User-facing AI proposals are edits or drafts backed by JSON operations with validation, canvas preview, explicit apply/reject, and compact staged-draft review summaries. Operation-level include/exclude/removal controls were removed from the normal creative surface to reduce UI noise; detailed returned JSON remains available through provider details.
 - Project JSON import/export exists.
 - A first localhost automation API runs as part of `npm run dev` alongside Vite. It exposes health/template discovery plus a concrete `POST /recipes/ooze-melee-attack` endpoint that writes editable Project JSON, metadata JSON, and full-sheet PNG files for other local Codex/game-development tasks.
@@ -80,20 +80,12 @@ Verified from repository docs and source inspection on 2026-07-01:
 
 The repository contains Vitest tests for domain data functions, templates, export planning, export raster rendering, PNG encoding, provider parsing, canvas export wrappers, and app-shell smoke workflows.
 
-Known project commands from `package.json`:
-
-- `npm run build`
-- `npm test`
-- `npm run lint`
-- `npm run typecheck`
-
-Latest verified run on 2026-07-26: `npm run build`, `npm test -- --run`, `npm run lint`, and `npm run typecheck` passed after adding the localhost automation API and ooze melee attack recipe. The non-live Vitest suite currently has 13 test files and 236 tests. A combined-launcher smoke verified `npm run dev` can start the Vite UI and SpriteWrite API together on temporary ports, and an API smoke verified `POST /recipes/ooze-melee-attack` writes Project JSON, metadata JSON, and a valid PNG. Live local `qwen3:14b` quality probes remain available through `npm run test:ollama`.
+Prior memory reports build, non-live tests, lint, and typecheck passing on 2026-07-26 (13 test files, 236 tests at that time), plus combined-launcher and API recipe-export smoke checks. These are historical results, not current validation. See `MAINTAINER_GUIDE.md` for commands. `package.json` separates ordinary tests from live Ollama probes; neither suite was rerun for the convention refresh.
 
 ## Current Risks And Uncertainty
 
 - `docs/STATE_OF_SPRITEWRITE.md` is detailed and useful, but future agents should verify it against source before relying on every implementation claim.
-- Real browser-level download/export flows are still partially unresolved: the in-app browser can verify Project JSON export state, but it still does not expose blob download events and did not surface PNG export status through the automation backend during the 2026-07-18 audit. Non-browser coverage now exercises Project JSON import/export UI behavior, full sprite sheet metadata export UI behavior, current-frame/current-animation/full-sheet PNG export UI behavior, browser download helpers, deterministic PNG encoder golden bytes, and PNG binary smoke checks.
-- In-app browser smoke on 2026-07-18 verified the start screen, terrain template visibility, Hero demo editor load, 32x32 grid cell count, visible export controls, full-sheet row view, and no captured console errors through the local Vite dev server. Browser automation still does not provide durable blob-anchor download-event coverage, so real download-event coverage remains unresolved.
+- Real browser download-event coverage remains unresolved. The 2026-07-18 audit recorded start/editor/full-sheet smoke checks without captured console errors, but could not observe blob downloads or PNG export status through its automation backend. Recorded non-browser coverage includes Project JSON import/export, sheet metadata, all PNG export UI paths, download helpers, encoder golden bytes, and PNG binary smoke checks; this does not establish real browser download behavior.
 - Ollama integration is experimental and must fail gracefully. It can list local models, pull/download a named model through local Ollama, ask the selected model for structured selected-frame patch JSON or a larger single-frame draft, request first-pass structured animation drafts, and use recipe-shaped provider calls for some common frame-set requests. SpriteWrite should keep padding plain user prompts into constrained provider requests so users do not have to talk in Ollama contract language. The selected-frame parser accepts common wrappers such as `patch`, `operations`, `ops`, `patchOperations`, `patch_operations`, and a single operation object; wrong JSON shapes surface actionable errors. Do not center product work on provider cleverness, and do not let Ollama return opaque raster output.
 - AI Assist should remain visibly optional in the UX; the primary product path is draw static or animated grid assets, preview them, export current-frame PNGs, current-animation strip PNGs, full sprite sheet PNGs plus metadata, and save editable Project JSON.
 - The UX should be canvas-first, not dashboard-first: the central pixel canvas and bottom filmstrip are the main workflow; palette/layers are compact; preview/properties are contextual; AI and export are important but secondary focused surfaces. The visual language should stay sleek graphite/blue rather than SpriteWrite inheriting the green theme used in other apps.
@@ -123,5 +115,4 @@ Use `docs/STATE_OF_SPRITEWRITE.md` as the detailed active roadmap. Current next-
 - What is the right first durable project-library/save flow beyond browser draft and Project JSON export?
 - How strict should the Ollama animation-draft validator become before it blocks too many useful rough drafts?
 - Which engine-specific export profile should come first after the current boring generic JSON/import profile: Godot, Unity, or a custom importer preset?
-
 
