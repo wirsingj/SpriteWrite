@@ -9,7 +9,7 @@ durability: volatile; synthesize and prune aggressively.
 budget: About 1800 words; a working target, not a length to fill.
 read-with: Architecture; Maintainer Guide; docs/PRODUCT_VISION.md; docs/STATE_OF_SPRITEWRITE.md.
 update-when: direction, verified reality, risks, priorities, or useful engineering lessons change.
-last-verified: not established; claims not rechecked in this refresh.
+last-verified: 2026-10-17 for the checks scoped in the Maintainer Guide; unrelated claims retain prior evidence limits.
 agent-guidance: Verify implementation claims. Preserve human intent. Mark uncertainty. Surface conflicts. Prune stale detail.
 ---
 
@@ -61,7 +61,7 @@ Prior project memory records source inspection from 2026-07-01 and later additio
 - Ollama broad animation prompts route to a structured draft path with a critique-and-repair loop: editable drafts are requested, validated for patch correctness plus basic intent cues such as frame count, readable cell count, material/color fit, neighboring-frame continuity, rotation motion, and tile/grass anchoring, then retried with SpriteWrite feedback before rejection. Valid drafts are staged with explicit Apply Draft / Reject Draft controls before they mutate the project.
 - Numbered animation requests such as "3 animations: monk jumping, kneeling, punching" now route as multi-row animation sets instead of collapsing into one default 4-frame row.
 - Ollama broad animation drafts can now include structured `paletteAdditions`. SpriteWrite validates and merges those palette colors before validating frame operations, so a provider can propose appropriate asset colors, such as gold/orange coin colors, without SpriteWrite hard-coding the finished asset art.
-- Ollama broad asset prompts still have recipe rails for a few observed qwen-stable structural cases such as short grass tile variations, hero idle/cape, tentacle monster variations, and spinning-object fallback. Ordinary prompts such as rotating gold coin use direct provider-drafted editable frames with optional palette additions first; the compact spinning recipe is a fallback only after direct quality attempts fail.
+- Ollama recipe routing uses the original user subject, excluding palette names and generic padded guidance. Supported recipe families and the unresolved direct-draft-first divergence are described in `ARCHITECTURE.md`.
 - Live local `qwen3:14b` probes on 2026-07-18 showed compact recipe prompts returning usable JSON quickly for grass tile variations, hero idle/cape, and tentacle creature variations. Raw all-cell prompts remain more fragile and slower.
 - Staged structured Ollama animation drafts expose a compact draft review with rows, frame counts, patch-operation totals, visible swatches for new palette additions, quality-attempt count, FPS where available, and explicit Apply Draft / Reject Draft controls. Provider failures and rejected Ollama drafts still expose an expandable details payload with the padded prompt, model/base URL context, validation errors, and the attempted patch/draft JSON where available; the details disclosure includes a Copy All button for large Ollama/debug payloads.
 - Follow-up broad asset drafts are additive by default once the selected row contains art. SpriteWrite may reuse an empty starter row or obey explicit replace/update wording, but requests such as making grass after a generated coin must append rows instead of overwriting the coin row.
@@ -80,7 +80,7 @@ Prior project memory records source inspection from 2026-07-01 and later additio
 
 The repository contains Vitest tests for domain data functions, templates, export planning, export raster rendering, PNG encoding, provider parsing, canvas export wrappers, and app-shell smoke workflows.
 
-Prior memory reports build, non-live tests, lint, and typecheck passing on 2026-07-26 (13 test files, 236 tests at that time), plus combined-launcher and API recipe-export smoke checks. These are historical results, not current validation. See `MAINTAINER_GUIDE.md` for commands. `package.json` separates ordinary tests from live Ollama probes; neither suite was rerun for the convention refresh.
+On 2026-10-17, 240 tests in 13 files, build and lint passed on Windows/Node 22.22.3. Provider routing now follows the user subject rather than padded palette/guidance terms. Dedicated live Ollama, combined-launcher and API recipe-export smoke checks retain their earlier scope; they were not rerun. See `MAINTAINER_GUIDE.md` for commands and limits.
 
 ## Current Risks And Uncertainty
 

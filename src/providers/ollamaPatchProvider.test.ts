@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createBlankProject, createDefaultProject } from '../domain/spriteData'
+import { createSpriteWritePromptIntent } from './spriteWritePromptIntent'
 import {
   listOllamaModels,
   OllamaPatchProvider,
@@ -11,6 +12,37 @@ import {
 
 afterEach(() => {
   vi.unstubAllGlobals()
+})
+
+it.each([
+  ['A 6 frame animation of a coin spinning', 'spinning_object'],
+  ['A 6 frame animation of a landscape', null],
+  ['A 6 frame animation of a glowing star', null],
+  ['A hero idle animation, 6 frames', 'character_idle'],
+])('routes the user subject independently of padded palette and guidance: %s', async (instruction, recipe) => {
+  const project = createDefaultProject()
+  project.palette.push({ id: 'cape', name: 'Cape', hex: '#ff0000' })
+  const intent = createSpriteWritePromptIntent(instruction, project)
+  const fetchMock = vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({ response: JSON.stringify({ frames: [{ patch: [] }] }) }),
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  const provider = new OllamaPatchProvider({ baseUrl: 'http://localhost:11434', model: 'llama3.1:8b' })
+  await provider.requestAnimationDraft({
+    project, animationId: 'idle', frameId: 'idle-001', layerId: 'base',
+    instruction: intent.paddedInstruction,
+    frameCount: intent.frameCount,
+    constraints: { selectedColorId: 'cape' },
+  })
+  const prompt = JSON.parse(fetchMock.mock.calls[0][1].body).prompt as string
+  if (recipe) {
+    expect(prompt).toContain(`"recipe":"${recipe}"`)
+  } else {
+    expect(prompt).not.toContain('"recipe":')
+    expect(prompt).toContain('Each frame patch must draw the full visible frame')
+  }
+  if (recipe !== 'character_idle') expect(prompt).not.toContain('capeLean')
 })
 
 async function getAvailableLocalOllamaModels(): Promise<string[]> {

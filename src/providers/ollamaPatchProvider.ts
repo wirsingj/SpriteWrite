@@ -264,18 +264,14 @@ function describeUnexpectedPatchShape(parsed: unknown): string {
 }
 
 function shouldUseRecipeDraft(instruction: string): boolean {
-  const normalized = instruction.toLowerCase()
-  return (
-    normalized.includes('grass') ||
-    normalized.includes('hero') ||
-    normalized.includes('character') ||
-    normalized.includes('cape') ||
-    normalized.includes('coin') ||
-    normalized.includes('spinning') ||
-    normalized.includes('rotating') ||
-    normalized.includes('tentacle') ||
-    normalized.includes('monster')
+  return /\b(grass|hero(?:es)?|characters?|capes?|coins?|spinning|rotating|tentacles?|monsters?)\b/i.test(
+    recipeSubject(instruction),
   )
+}
+
+function recipeSubject(instruction: string): string {
+  // Palette names, generic guidance, and retry feedback are not asset intent.
+  return instruction.match(/^User request: ([\s\S]*?)\r?\nSpriteWrite interpretation:/)?.[1] ?? instruction
 }
 
 function parseOllamaRecipeDraftResponse(raw: string): unknown {
@@ -1077,11 +1073,11 @@ Current cells: ${JSON.stringify(currentCells)}
 function buildOllamaRecipeDraftPrompt(
   request: AiPatchRequest & { frameCount?: number; variationCount?: number },
 ): string {
-  const normalized = request.instruction.toLowerCase()
+  const normalized = recipeSubject(request.instruction).toLowerCase()
   const frameCount = Math.max(3, Math.min(6, Math.round(request.frameCount ?? 4)))
   const variationCount = Math.max(1, Math.min(6, Math.round(request.variationCount ?? 1)))
 
-  if (normalized.includes('grass')) {
+  if (/\bgrass\b/.test(normalized)) {
     return `Return JSON only. No markdown. No cells.
 SpriteWrite padded request:
 ${request.instruction}
@@ -1097,7 +1093,7 @@ Rules:
 - No patch arrays, no width/height, no prose.`
   }
 
-  if (normalized.includes('tentacle') || normalized.includes('monster')) {
+  if (/\b(tentacles?|monsters?)\b/.test(normalized)) {
     return `Return JSON only. No markdown. No cells.
 SpriteWrite padded request:
 ${request.instruction}
@@ -1114,7 +1110,7 @@ Rules:
 - No patch arrays, no width/height, no prose.`
   }
 
-  if (normalized.includes('hero') || normalized.includes('character') || normalized.includes('cape')) {
+  if (/\b(hero(?:es)?|characters?|capes?)\b/.test(normalized)) {
     return `Return JSON only. No markdown. No cells.
 SpriteWrite padded request:
 ${request.instruction}
@@ -1130,7 +1126,7 @@ Rules:
   }
 
 
-  if (normalized.includes('coin') || normalized.includes('spinning') || normalized.includes('rotating')) {
+  if (/\b(coins?|spinning|rotating)\b/.test(normalized)) {
     return `Return JSON only. No markdown. No cells.
 SpriteWrite padded request:
 ${request.instruction}

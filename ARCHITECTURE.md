@@ -145,7 +145,7 @@ game/Codex client -> localhost SpriteWrite API -> SpriteProject recipe -> valida
 
 `src/providers/spriteWritePromptIntent.ts` is the small interpretation layer between plain user prompts and provider calls. It currently classifies prompts as selected-frame edits, single-frame drafts, 3-6 frame animation drafts, or multi-variation animation sets, then pads the instruction with SpriteWrite constraints before Ollama sees it. Users should not need to manually write provider-contract prompts.
 
-Current recipe-shaped Ollama rails cover a few observed qwen-stable structural families: grass wave/tile variation sets, character/hero idle, tentacle creature variation sets, and a generic spinning-object fallback for compact rotating icon/object drafts when direct draft attempts fail. Asset-specific requests such as rotating gold coins should use direct animation draft JSON with optional palette additions first rather than starting from SpriteWrite-owned art generators.
+Recipe routing matches whole subject words in the original user request, excluding padded palette names, generic guidance, and repair feedback. Otherwise a palette ID such as `cape` can misroute a coin request to character idle. Current routes include grass, character/hero, tentacle/monster, and spinning objects. Spinning requests currently use recipes immediately; the intended direct-draft-first approach remains a divergence to resolve.
 
 Future rails may add structured palette or layer operations, but must remain reviewable, reversible, and derived into `SpriteProject` data before export.
 

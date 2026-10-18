@@ -9,11 +9,13 @@ durability: moderately stable; keep concise and practical.
 budget: About 1200 words; a working target; keep procedures concise rather than exhaustive.
 read-with: SOT; Architecture; README.md; docs/PRODUCT_VISION.md; docs/DEV_LOOP.md; docs/AUDIT_CHECKLIST.md.
 update-when: commands, setup, checks, common failures, generated files, or maintenance practices change.
-last-verified: not established; claims not rechecked in this refresh.
+last-verified: 2026-10-17; current checks and limits are recorded below; unrelated claims retain their prior scope.
 agent-guidance: Run focused checks for touched areas. Do not reset or discard work. Report uncertainty and exact command results.
 ---
 
 # Maintainer Guide
+
+On 2026-10-17, Windows/Node 22.22.3 passed `npm test` (240 tests in 13 files), `npm run build` and `npm run lint`. Routing regressions distinguish requested subjects from palette/guidance text. The dedicated live Ollama suite and launcher/API smoke checks were not rerun.
 
 ## Setup
 
@@ -140,15 +142,11 @@ The tracked root `AGENTS.md` is the repository-wide Codex entrypoint; resolve it
 
 ## YAIML Maintenance
 
-Follow the synthesis rules in `AGENTS.md`: update the existing account of changed facts, remove superseded claims and resolved items, and retain completed work only as capability, constraint, decision, or an actionable lesson. Keep one detailed home per fact; never relocate run history just to shorten the core.
+Read and follow [Using YAIML](.yaiml/YAIML_GUIDE.md) and the [skill catalog](.yaiml/skills/INDEX.md) for ordinary context/maintenance and requested workflows, including Git actions. Root `AGENTS.md` connects these methods; twelve `.agents/skills/` entries forward arguments. Dormant starters support offline memory creation/repair; instantiate them only for a concrete need. Preserve local facts, authority, budgets, privacy, retention and discovery layout. Coordinate concurrent writers; re-reading is not a lock. Reconcile combined meaning against the actual integration target and common ancestor.
 
-For convention refreshes, use the human-provided, workspace-local, or team-approved reference; request one if absent. Compare its update and init guidance with local instructions and maintenance notes. Preserve project knowledge, discovery layout/version, local names, budgets, custom fields, and review rules. Do not add prompt/template copies without a concrete workflow need.
+Source: [YAIML](https://github.com/wirsingj/YAIML), published revision `89c883d9a66dffc3b8671d975f7fa6c46535d676`. The 27-resource bundle SHA-256 is `3958b3c802cef951147d316c41a48e0aa7ad6c2aa72c84954c3cac003c169e07` (sorted package-relative paths, NUL, Git blob bytes; CRLF/LF differences verified). The pre-upgrade baseline was unavailable; local guidance remains preserved.
 
-Coordinate concurrent writers through separate workspaces or explicit file ownership; re-reading is not a lock. Keep routine edits passage-scoped and arrange broad compression separately. Before PR/MR integration, reconcile affected memory with the actual target and combined changes, including clean merges. Preserve independent contributions and unresolved decisions under existing review authority. Distinguish branch implementation from deployment; follow task-authorized commit/push permissions.
-
-For refreshes and compression, measure whole-document whitespace-delimited words before and after; compress affected memory safely first. Preserve human direction, evidence scope, uncertainty, unresolved conflicts, and governed retention. Report necessary growth, retained overages, and next actions in the task response, not memory. Never pad, inflate budgets, or delete necessary knowledge to meet a number.
-
-Verify discovery paths, links, stable headers, instruction activation, and sensitive-content handling. Repeat the same-reference refresh and leave healthy files unchanged. Report configured persistence separately from observed session loading. Keep reference revisions in task results and private reference locations, credentials, personal details, private transcripts, and raw sensitive logs out of committed memory.
+The [notice](.yaiml/YAIML_NOTICE.md) covers copied resources, permits commercial/client use with credit and preserves earlier grants; the application license is unchanged. Refresh from the recorded or an authorized newer source. No startup polling or automatic backlog work. Resource/link/native-entry and ShepAIrd discovery checks passed on 2026-10-17. Fresh-session activation remains untested here; current checks are recorded in this guide. Repeat reconciliation must leave healthy files unchanged.
 
 ## Diagnostics
 
