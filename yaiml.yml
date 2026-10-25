@@ -6,19 +6,28 @@ project:
 
 documents:
   sot:
-    path: SOT.md
+    path: .yaiml/SOT.md
     title: SOT
   architecture:
-    path: ARCHITECTURE.md
+    path: .yaiml/ARCHITECTURE.md
     title: Architecture
   maintainer:
-    path: MAINTAINER_GUIDE.md
+    path: .yaiml/MAINTAINER_GUIDE.md
     title: Maintainer Guide
+  changes:
+    path: .yaiml/changes.md
+    title: Project Changes
   product_vision:
     path: docs/PRODUCT_VISION.md
     title: Product Vision
 
 supporting:
+  - path: .yaiml/RELEASE.md
+    role: release-identity
+  - path: .yaiml/VERSIONING.md
+    role: revision-guide
+  - path: .yaiml/CHANGE_RECORDS.md
+    role: change-record-guide
   - path: AI_USAGE.md
     role: ai-usage-disclosure
   - path: .yaiml/YAIML_GUIDE.md
@@ -34,4 +43,4 @@ supporting:
 
 reference:
   yaiml:
-    note: Provide a local or team-approved YAIML reference at run time for manual convention refreshes; do not commit machine-specific paths.
+    note: Init and refresh resolve the official YAIML latest main once per acquisition; alternative sources require an explicit request. Ordinary work uses installed local guidance.

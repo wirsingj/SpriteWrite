@@ -1,4 +1,5 @@
 ---
+yaiml-revision: "0.1.32e5d95ac289f9aa"
 yaiml: 0.2
 role: maintainer
 title: Maintainer Guide
@@ -9,11 +10,13 @@ durability: moderately stable; keep concise and practical.
 budget: About 1200 words; a working target; keep procedures concise rather than exhaustive.
 read-with: SOT; Architecture; README.md; docs/PRODUCT_VISION.md; docs/DEV_LOOP.md; docs/AUDIT_CHECKLIST.md.
 update-when: commands, setup, checks, common failures, generated files, or maintenance practices change.
-last-verified: 2026-10-17; current checks and limits are recorded below; unrelated claims retain their prior scope.
+last-verified: 2026-10-24 for YAIML setup; application checks retain their 2026-10-17 scope below.
 agent-guidance: Run focused checks for touched areas. Do not reset or discard work. Report uncertainty and exact command results.
 ---
 
 # Maintainer Guide
+
+Read [pending change records](changes.md) before relying on this snapshot. Commands and unlinked repository paths use the project root.
 
 On 2026-10-17, Windows/Node 22.22.3 passed `npm test` (240 tests in 13 files), `npm run build` and `npm run lint`. Routing regressions distinguish requested subjects from palette/guidance text. The dedicated live Ollama suite and launcher/API smoke checks were not rerun.
 
@@ -138,15 +141,15 @@ Inspect `git status --short` before editing and preserve unrelated work. Do not 
 
 ## Agent Instructions Found
 
-The tracked root `AGENTS.md` is the repository-wide Codex entrypoint; resolve its YAIML paths from the repository root even when working in subdirectories. Its instructions were supplied in this session. Automatic loading in a separate fresh session has not been tested. No other tracked agent or contribution instruction files were found.
+The tracked root `AGENTS.md` is the repository-wide Codex entrypoint; resolve its YAIML paths from the repository root even in subdirectories. This session received its instructions and twelve native skill descriptions from the host; init was read and used. This does not verify every skill, interactive menu, or another host.
 
 ## YAIML Maintenance
 
-Read and follow [Using YAIML](.yaiml/YAIML_GUIDE.md) and the [skill catalog](.yaiml/skills/INDEX.md) for ordinary context/maintenance and requested workflows, including Git actions. Root `AGENTS.md` connects these methods; twelve `.agents/skills/` entries forward arguments. Dormant starters support offline memory creation/repair; instantiate them only for a concrete need. Preserve local facts, authority, budgets, privacy, retention and discovery layout. Coordinate concurrent writers; re-reading is not a lock. Reconcile combined meaning against the actual integration target and common ancestor.
+Read and follow [Using YAIML](YAIML_GUIDE.md) and the [skill catalog](skills/INDEX.md) for ordinary context/maintenance and requested workflows, including Git actions. Root `AGENTS.md` connects these methods; twelve `.agents/skills/` entries forward arguments. Dormant starters support offline memory creation/repair; instantiate them only for a concrete need. Preserve local facts, authority, budgets, privacy, retention and discovery layout. Coordinate concurrent writers; re-reading is not a lock. Reconcile combined meaning against the actual integration target and common ancestor.
 
-Source: [YAIML](https://github.com/wirsingj/YAIML), published revision `89c883d9a66dffc3b8671d975f7fa6c46535d676`. The 27-resource bundle SHA-256 is `3958b3c802cef951147d316c41a48e0aa7ad6c2aa72c84954c3cac003c169e07` (sorted package-relative paths, NUL, Git blob bytes; CRLF/LF differences verified). The pre-upgrade baseline was unavailable; local guidance remains preserved.
+Source: [YAIML](https://github.com/wirsingj/YAIML), release 0.5.0 experimental, exact commit `db1dcd120ede0b59ebef16ed82f77ee7ea8cabaa`. Acquired resources retain upstream stamps; installed predecessors matched the previously recorded source. Project memory and native wrappers have local baseline stamps. Core memory is consolidated in `.yaiml/`; root discovery retains its legacy shape. [Changes](changes.md) owns retained records and incorporation state. Earlier local revision history is unknown.
 
-The [notice](.yaiml/YAIML_NOTICE.md) covers copied resources, permits commercial/client use with credit and preserves earlier grants; the application license is unchanged. Refresh from the recorded or an authorized newer source. No startup polling or automatic backlog work. Resource/link/native-entry and ShepAIrd discovery checks passed on 2026-10-17. Fresh-session activation remains untested here; current checks are recorded in this guide. Repeat reconciliation must leave healthy files unchanged.
+The [notice](YAIML_NOTICE.md) is unchanged and retains copied-material terms. Init/refresh resolves official latest main once; provenance does not pin later runs. No startup polling or backlog execution. Local discovery, resource links and native routes are checked during setup; external ShepAIrd audit-role discovery and revision-aware writing remain unverified. Repeat reconciliation must preserve healthy files and the established baseline.
 
 ## Diagnostics
 

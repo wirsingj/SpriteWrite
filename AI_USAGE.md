@@ -1,4 +1,5 @@
 ---
+yaiml-revision: "0.1.32e5d95ac289f9aa"
 yaiml: 0.2
 role: ai-usage-disclosure
 title: SpriteWrite AI Usage

@@ -1,4 +1,5 @@
 ---
+yaiml-revision: "0.1.32e5d95ac289f9aa"
 yaiml: 0.2
 role: architecture
 title: Architecture
@@ -14,6 +15,8 @@ agent-guidance: Prefer existing patterns. Keep project data canonical. Do not in
 ---
 
 # Architecture
+
+Read [pending change records](changes.md) before relying on this snapshot. Repository paths below are relative to the project root unless linked otherwise.
 
 ## Stack
 

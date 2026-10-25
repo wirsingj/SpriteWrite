@@ -1,4 +1,5 @@
 ---
+yaiml-revision: "0.1.32e5d95ac289f9aa"
 yaiml: 0.2
 role: sot
 title: SOT
@@ -14,6 +15,8 @@ agent-guidance: Verify implementation claims. Preserve human intent. Mark uncert
 ---
 
 # SOT
+
+Read [pending change records](changes.md) before relying on this snapshot. Repository paths below are relative to the project root unless linked otherwise.
 
 ## YAIML Note
 
